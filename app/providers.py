@@ -8,11 +8,16 @@ So ONE class works for all of them; only base_url / model / key differ.
 To add another vendor: add one entry to _REGISTRY below and put <PREFIX>_API_KEY in .env.
 
 provider="auto" (the default) tries the providers listed in PROVIDER_ORDER one by one:
-if one is rate-limited, out of credit, or down, the next one is used automatically.
+if one is rate-limited, out of credit, too slow, or down, the next one is used automatically.
+
+Optional per-provider settings in .env (replace GROQ with GEMINI, OPENROUTER, ...):
+GROQ_REASONING_EFFORT=low     # low | medium | high  -> reasoning models answer MUCH faster on "low"
+GROQ_TIMEOUT=30               # seconds to wait before giving up and trying the next provider
 """
 
 import logging
 import os
+import time
 from abc import ABC, abstractmethod
 
 from openai import OpenAI
@@ -23,7 +28,7 @@ log = logging.getLogger("local-llm")
 
 
 class ProviderError(Exception):
-    """Provider is missing, misconfigured, or the model call failed."""
+    """Provider is missing, misconfigured, too slow, or the model call failed."""
 
 
 class LLMProvider(ABC):
@@ -37,35 +42,65 @@ class LLMProvider(ABC):
         """Send messages, return the assistant's text."""
 
 
+def _describe(exc: Exception) -> str:
+    """Error text plus the provider's response body (that is where the real reason is)."""
+    body = ""
+    resp = getattr(exc, "response", None)
+    if resp is not None:
+        try:
+            body = resp.text[:300]
+        except Exception:
+            pass
+    return f"{type(exc).__name__}: {body or exc}"
+
+
 class OpenAICompatibleProvider(LLMProvider):
     def __init__(
-        self, name: str, api_key: str, base_url: str, model: str, timeout: int
+        self,
+        name: str,
+        api_key: str,
+        base_url: str,
+        model: str,
+        timeout: float,
+        reasoning_effort: str | None = None,
     ):
         self.name = name
         self.model = model
-        # max_retries=1: don't waste time retrying a rate-limited provider; fall back instead
+        self.base_url = base_url
+        self.reasoning_effort = reasoning_effort
+        # max_retries=0: if a provider is slow or rate-limited we move to the next one instead of waiting
         self._client = OpenAI(
-            api_key=api_key, base_url=base_url, timeout=timeout, max_retries=1
+            api_key=api_key, base_url=base_url, timeout=timeout, max_retries=0
         )
 
     def chat(self, messages, temperature=0.0, json_mode=False) -> str:
-        kwargs = dict(model=self.model, messages=messages, temperature=temperature)
-        try:
-            if json_mode:
-                try:
-                    resp = self._client.chat.completions.create(
-                        **kwargs, response_format={"type": "json_object"}
-                    )
-                except Exception:
-                    # Some providers/models don't support response_format; retry plainly.
-                    resp = self._client.chat.completions.create(**kwargs)
-            else:
+        base = dict(model=self.model, messages=messages, temperature=temperature)
+        full = dict(base)
+        if self.reasoning_effort:
+            full["reasoning_effort"] = self.reasoning_effort
+        if json_mode:
+            full["response_format"] = {"type": "json_object"}
+
+        # Richest request first. Only if the provider says "400 bad request" (it does not
+        # understand an optional feature) do we retry without that feature.
+        variants = [full]
+        if self.reasoning_effort:
+            variants.append({k: v for k, v in full.items() if k != "reasoning_effort"})
+        if json_mode:
+            variants.append(base)
+
+        last_exc = None
+        for kwargs in variants:
+            try:
                 resp = self._client.chat.completions.create(**kwargs)
-        except Exception as exc:  # network, auth, rate limit, model not found...
-            raise ProviderError(
-                f"{self.name} failed: {type(exc).__name__}: {exc}"
-            ) from exc
-        return resp.choices[0].message.content or ""
+                return resp.choices[0].message.content or ""
+            except Exception as exc:
+                last_exc = exc
+                if getattr(exc, "status_code", None) not in (400, 422):
+                    break  # timeout / rate limit / auth / 5xx: retrying the same provider will not help
+        raise ProviderError(
+            f"{self.name} failed (model={self.model}, url={self.base_url}): {_describe(last_exc)}"
+        ) from last_exc
 
 
 class FallbackProvider(LLMProvider):
@@ -79,14 +114,25 @@ class FallbackProvider(LLMProvider):
     def chat(self, messages, temperature=0.0, json_mode=False) -> str:
         errors = []
         for provider in self.providers:
+            started = time.perf_counter()
+            log.info("trying provider %s (%s)", provider.name, provider.model)
             try:
                 text = provider.chat(messages, temperature, json_mode)
             except ProviderError as exc:
+                took = time.perf_counter() - started
                 log.warning(
-                    "provider %s failed, trying next: %s", provider.name, str(exc)[:200]
+                    "provider %s failed after %.1fs, trying next: %s",
+                    provider.name,
+                    took,
+                    str(exc)[:200],
                 )
                 errors.append(f"{provider.name}: {str(exc)[:150]}")
                 continue
+            log.info(
+                "provider %s answered in %.1fs",
+                provider.name,
+                time.perf_counter() - started,
+            )
             self.name, self.model = (
                 provider.name,
                 provider.model,
@@ -95,23 +141,33 @@ class FallbackProvider(LLMProvider):
         raise ProviderError("All providers failed -> " + " | ".join(errors))
 
 
-# name -> (env prefix, default base_url, default model, key needed?)
-# Model names change over time: if one stops working, edit <PREFIX>_MODEL in .env.
+# name -> env prefix, default base_url, default model
+# Model names change over time: if one stops working, run scripts/check_providers.py
 _REGISTRY = {
     "gemini": {
         "prefix": "GEMINI",
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "model": "gemini-2.5-flash",
+        "model": "gemini-3.1-flash-lite",
     },
     "groq": {
         "prefix": "GROQ",
         "base_url": "https://api.groq.com/openai/v1",
-        "model": "llama-3.3-70b-versatile",
+        "model": "openai/gpt-oss-120b",
+    },
+    "cerebras": {
+        "prefix": "CEREBRAS",
+        "base_url": "https://api.cerebras.ai/v1",
+        "model": "llama-3.3-70b",
+    },
+    "mistral": {
+        "prefix": "MISTRAL",
+        "base_url": "https://api.mistral.ai/v1",
+        "model": "mistral-small-latest",
     },
     "openrouter": {
         "prefix": "OPENROUTER",
         "base_url": "https://openrouter.ai/api/v1",
-        "model": "meta-llama/llama-3.3-70b-instruct:free",
+        "model": "google/gemma-4-31b-it:free",
     },
     "openai": {
         "prefix": "OPENAI",
@@ -134,6 +190,10 @@ def _cfg(name: str) -> dict:
         "api_key": os.getenv(f"{p}_API_KEY", r.get("default_key", "")).strip(),
         "base_url": os.getenv(f"{p}_BASE_URL", r["base_url"]).strip(),
         "model": os.getenv(f"{p}_MODEL", r["model"]).strip(),
+        "reasoning_effort": os.getenv(f"{p}_REASONING_EFFORT", "").strip() or None,
+        "timeout": float(
+            os.getenv(f"{p}_TIMEOUT", "") or get_settings().request_timeout
+        ),
     }
 
 
@@ -153,8 +213,27 @@ def _build(name: str, model: str | None = None) -> OpenAICompatibleProvider:
         cfg["api_key"],
         cfg["base_url"],
         model or cfg["model"],
-        get_settings().request_timeout,
+        cfg["timeout"],
+        cfg["reasoning_effort"],
     )
+
+
+def list_models(name: str) -> list[str]:
+    """Ask the provider which model names this key can use (fixes 404 'model not found')."""
+    if name not in _REGISTRY:
+        raise ProviderError(f"Unknown provider: {name}")
+    cfg = _cfg(name)
+    if not cfg["api_key"]:
+        raise ProviderError(f"{_REGISTRY[name]['prefix']}_API_KEY is not set in .env")
+    try:
+        client = OpenAI(
+            api_key=cfg["api_key"], base_url=cfg["base_url"], timeout=30, max_retries=0
+        )
+        return sorted(m.id.removeprefix("models/") for m in client.models.list())
+    except Exception as exc:
+        raise ProviderError(
+            f"{name} could not list models (url={cfg['base_url']}): {_describe(exc)}"
+        ) from exc
 
 
 def get_provider(name: str | None = None, model: str | None = None) -> LLMProvider:

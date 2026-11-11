@@ -1,4 +1,5 @@
 """All settings come from environment variables / the .env file."""
+
 from functools import lru_cache
 
 from dotenv import load_dotenv
@@ -18,7 +19,7 @@ class Settings(BaseSettings):
     max_rows: int = 1000
     max_tables_in_prompt: int = 12
     max_repair_attempts: int = 2
-    request_timeout: int = 120
+    request_timeout: int = 60
     enforce_table_whitelist: bool = True
 
     schema_file: str = "schema/schema.json"

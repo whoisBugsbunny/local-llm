@@ -150,3 +150,8 @@ def test_auto_skips_providers_without_keys(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "x")
     chain = providers.get_provider("auto")
     assert [p.name for p in chain.providers] == ["groq", "local"]
+
+
+def test_parse_json_ignores_think_block():
+    out = service._parse_json('<think>maybe {"a": 1}</think>\n{"sql": "SELECT 1", "explanation": "x"}')
+    assert out["sql"] == "SELECT 1"

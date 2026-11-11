@@ -2,6 +2,7 @@
 // Flow: question -> Python AI -> SQL -> YOUR validateReadOnlySql + runReadOnlyQuery -> rows.
 //
 // import { aiPost } from "../services/aiClient.js";
+import { performance } from "node:perf_hooks";
 
 router.post("/ai/report", async (req, res) => {
     const userId = getUserId(req, res);
@@ -12,10 +13,18 @@ router.post("/ai/report", async (req, res) => {
         return res.status(400).json({ error: "question is required" });
     }
 
+    const startedAt = performance.now();
     try {
         // 1) ask the AI for SQL (only schema names go out, never data)
         let gen = await aiPost("/sql", { question, previous_sql: previousSql, provider, model });
-        if (!gen.sql) return res.json({ needsClarification: true, question: gen.clarifying_question, explanation: gen.explanation });
+        if (!gen.sql) {
+            return res.json({
+                needsClarification: true,
+                question: gen.clarifying_question,
+                explanation: gen.explanation,
+                executionTimeMs: Number((performance.now() - startedAt).toFixed(2)),
+            });
+        }
 
         // 2) run it through the SAME safe runner you already use
         const run = (sql) => runReadOnlyQuery({
@@ -47,7 +56,13 @@ router.post("/ai/report", async (req, res) => {
             });
         }
 
-        return res.json({ ...mapped, generatedSql: gen.sql, explanation: gen.explanation, visual });
+        return res.json({
+            ...mapped,
+            generatedSql: gen.sql,
+            explanation: gen.explanation,
+            visual,
+            executionTimeMs: Number((performance.now() - startedAt).toFixed(2)),
+        });
     } catch (err) {
         return handleRequestError(res, err, "AI report");
     }
@@ -56,7 +71,8 @@ router.post("/ai/report", async (req, res) => {
 router.post("/ai/chat", async (req, res) => {
     if (!getUserId(req, res)) return;
     try {
-        return res.json(await aiPost("/chat", req.body));
+        const result = await aiPost("/chat", req.body);
+        return res.json(result);
     } catch (err) {
         return handleRequestError(res, err, "AI chat");
     }

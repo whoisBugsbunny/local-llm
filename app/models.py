@@ -55,6 +55,7 @@ class SqlResponse(BaseModel):
     tables_used: list[str] = []
     provider: str
     model: str
+    execution_time_ms: float
 
 
 # ---------- /visual ----------
@@ -77,6 +78,7 @@ class VisualResponse(BaseModel):
     content: Any  # dict for "spec", string for code
     provider: str
     model: str
+    execution_time_ms: float
 
 
 # ---------- /chat ----------
@@ -89,3 +91,4 @@ class ChatResponse(BaseModel):
     reply: str
     provider: str
     model: str
+    execution_time_ms: float

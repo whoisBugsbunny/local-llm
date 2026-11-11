@@ -30,6 +30,15 @@ Providers without a key are skipped. If one is rate-limited or down, the next on
 tells you which one did (`provider`, `model`). Send `"provider": "groq"` to force one. `GET /providers` shows what is configured.
 Add a vendor: one line in `_REGISTRY` in `app/providers.py`.
 
+### Provider not working?
+
+```bash
+python scripts/check_providers.py
+```
+Tests every provider that has a key and, on failure, prints the models your key can really use
+(also available as `GET /providers/{name}/models`). Most failures are a wrong or retired model name
+(404) or a wrong key (401). Fix the `<NAME>_MODEL` line in `.env` and restart.
+
 ## Switch to a local model (later)
 
 ```bash
@@ -43,10 +52,10 @@ Any OpenAI-compatible server works (llama.cpp, vLLM, LM Studio): change `LOCAL_B
 
 | Endpoint | Input | Output |
 |---|---|---|
-| `POST /sql` | `question`, optional `previous_sql`, `provider`, `model`, `schema_override` | `sql`, `explanation`, `clarifying_question`, `tables_used` |
-| `POST /sql/fix` | `sql`, `error` (DB error), optional `question` | corrected `sql` |
-| `POST /visual` | `question`, `columns:[{name,type}]`, `format: spec\|tsx\|html\|js` | chart spec (JSON) or code |
-| `POST /chat` | `messages:[{role,content}]` | `reply` |
+| `POST /sql` | `question`, optional `previous_sql`, `provider`, `model`, `schema_override` | `sql`, `explanation`, `clarifying_question`, `tables_used`, `execution_time_ms` |
+| `POST /sql/fix` | `sql`, `error` (DB error), optional `question` | corrected `sql`, `execution_time_ms` |
+| `POST /visual` | `question`, `columns:[{name,type}]`, `format: spec\|tsx\|html\|js` | chart spec (JSON) or code, `execution_time_ms` |
+| `POST /chat` | `messages:[{role,content}]` | `reply`, `execution_time_ms` |
 | `GET /providers`, `GET /health` | | |
 
 ```bash
