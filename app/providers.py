@@ -1,7 +1,7 @@
 """
 LLM providers.
 
-Almost every AI vendor (OpenAI, Gemini, Groq, Cerebras, Mistral, OpenRouter) and every
+Almost every AI vendor (OpenAI, Gemini, Groq, OpenRouter) and every
 local server (Ollama, llama.cpp, LM Studio) offers an "OpenAI-compatible" API.
 So ONE class works for all of them; only base_url / model / key differ.
 
@@ -153,16 +153,6 @@ _REGISTRY = {
         "prefix": "GROQ",
         "base_url": "https://api.groq.com/openai/v1",
         "model": "openai/gpt-oss-120b",
-    },
-    "cerebras": {
-        "prefix": "CEREBRAS",
-        "base_url": "https://api.cerebras.ai/v1",
-        "model": "llama-3.3-70b",
-    },
-    "mistral": {
-        "prefix": "MISTRAL",
-        "base_url": "https://api.mistral.ai/v1",
-        "model": "mistral-small-latest",
     },
     "openrouter": {
         "prefix": "OPENROUTER",

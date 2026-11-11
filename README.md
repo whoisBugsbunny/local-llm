@@ -25,7 +25,7 @@ Interactive docs: http://127.0.0.1:8001/docs
 
 ## Providers and automatic fallback
 
-`DEFAULT_PROVIDER=auto` tries `PROVIDER_ORDER` in sequence (Gemini, Groq, Cerebras, Mistral, OpenRouter, local).
+`DEFAULT_PROVIDER=auto` tries `PROVIDER_ORDER` in sequence (Gemini, Groq, OpenRouter, local).
 Providers without a key are skipped. If one is rate-limited or down, the next one answers; the response
 tells you which one did (`provider`, `model`). Send `"provider": "groq"` to force one. `GET /providers` shows what is configured.
 Add a vendor: one line in `_REGISTRY` in `app/providers.py`.

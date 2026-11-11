@@ -3,6 +3,7 @@ Tests every provider that has a key in .env and shows what is wrong.
 Run from the project folder:   python scripts/check_providers.py
 Standalone: needs only the packages you already installed. Never prints keys.
 """
+
 import os
 
 from dotenv import load_dotenv
@@ -12,13 +13,19 @@ load_dotenv()  # finds the .env in the project folder
 
 # name: (env prefix, default base_url, default model)
 PROVIDERS = {
-    "gemini":     ("GEMINI",     "https://generativelanguage.googleapis.com/v1beta/openai/", "gemini-2.5-flash"),
-    "groq":       ("GROQ",       "https://api.groq.com/openai/v1",                           "llama-3.3-70b-versatile"),
-    "cerebras":   ("CEREBRAS",   "https://api.cerebras.ai/v1",                               "llama-3.3-70b"),
-    "mistral":    ("MISTRAL",    "https://api.mistral.ai/v1",                                "mistral-small-latest"),
-    "openrouter": ("OPENROUTER", "https://openrouter.ai/api/v1",                             "meta-llama/llama-3.3-70b-instruct:free"),
-    "openai":     ("OPENAI",     "https://api.openai.com/v1",                                "gpt-4o-mini"),
-    "local":      ("LOCAL",      "http://localhost:11434/v1",                                "qwen2.5-coder:3b"),
+    "gemini": (
+        "GEMINI",
+        "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "gemini-2.5-flash",
+    ),
+    "groq": ("GROQ", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile"),
+    "openrouter": (
+        "OPENROUTER",
+        "https://openrouter.ai/api/v1",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    ),
+    "openai": ("OPENAI", "https://api.openai.com/v1", "gpt-4o-mini"),
+    "local": ("LOCAL", "http://localhost:11434/v1", "qwen2.5-coder:3b"),
 }
 
 
@@ -46,7 +53,8 @@ for name, (prefix, default_url, default_model) in PROVIDERS.items():
     client = OpenAI(api_key=key, base_url=url, timeout=60, max_retries=0)
     try:
         r = client.chat.completions.create(
-            model=model, messages=[{"role": "user", "content": "Reply with the single word OK"}]
+            model=model,
+            messages=[{"role": "user", "content": "Reply with the single word OK"}],
         )
         print(f"   WORKS -> {(r.choices[0].message.content or '').strip()[:40]!r}")
     except Exception as exc:

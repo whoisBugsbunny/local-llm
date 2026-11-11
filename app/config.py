@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     service_api_key: str = "change-me"
     default_provider: str = "auto"  # "auto" = try PROVIDER_ORDER in sequence
-    provider_order: str = "gemini,groq,cerebras,mistral,openrouter,local"
+    provider_order: str = "gemini,groq,openrouter,local"
     # Per-provider keys/models (GEMINI_API_KEY, GROQ_MODEL ...) are read in providers.py
 
     max_rows: int = 1000
