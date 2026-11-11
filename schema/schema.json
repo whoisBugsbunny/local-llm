@@ -1,0 +1,31 @@
+{
+  "schema_name": "VTF",
+  "glossary": {
+    "GRN": "goods receipt note",
+    "PO": "purchase order",
+    "revenue": "sales amount"
+  },
+  "tables": [
+    {
+      "name": "SALES_ORDERS",
+      "description": "One row per sales order header",
+      "columns": [
+        {"name": "ORDER_ID", "type": "NVARCHAR", "description": "Order number"},
+        {"name": "CUSTOMER_ID", "type": "NVARCHAR", "description": "Links to CUSTOMERS.CUSTOMER_ID"},
+        {"name": "ORDER_DATE", "type": "DATE", "description": ""},
+        {"name": "TOTAL_AMOUNT", "type": "DECIMAL", "description": "Order value in INR"},
+        {"name": "STATUS", "type": "NVARCHAR", "description": "OPEN, SHIPPED, CANCELLED"}
+      ]
+    },
+    {
+      "name": "CUSTOMERS",
+      "description": "Customer master data",
+      "columns": [
+        {"name": "CUSTOMER_ID", "type": "NVARCHAR", "description": ""},
+        {"name": "CUSTOMER_NAME", "type": "NVARCHAR", "description": ""},
+        {"name": "CITY", "type": "NVARCHAR", "description": ""},
+        {"name": "STATE", "type": "NVARCHAR", "description": ""}
+      ]
+    }
+  ]
+}
