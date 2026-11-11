@@ -23,13 +23,20 @@ python -m pytest                                       # tests (no API key neede
 ```
 Interactive docs: http://127.0.0.1:8001/docs
 
+## Providers and automatic fallback
+
+`DEFAULT_PROVIDER=auto` tries `PROVIDER_ORDER` in sequence (Gemini, Groq, Cerebras, Mistral, OpenRouter, local).
+Providers without a key are skipped. If one is rate-limited or down, the next one answers; the response
+tells you which one did (`provider`, `model`). Send `"provider": "groq"` to force one. `GET /providers` shows what is configured.
+Add a vendor: one line in `_REGISTRY` in `app/providers.py`.
+
 ## Switch to a local model (later)
 
 ```bash
 # install Ollama from ollama.com, then:
 ollama pull qwen2.5-coder:7b          # 14b or 32b is much better at SQL if your GPU/RAM allows
 ```
-Then either set `DEFAULT_PROVIDER=local` in `.env`, or send `"provider": "local"` per request.
+Then set `DEFAULT_PROVIDER=local` (or put `local` first in `PROVIDER_ORDER`), or send `"provider": "local"` per request.
 Any OpenAI-compatible server works (llama.cpp, vLLM, LM Studio): change `LOCAL_BASE_URL` and `LOCAL_MODEL`.
 
 ## Endpoints (all need header `X-API-Key`)

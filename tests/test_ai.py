@@ -114,3 +114,39 @@ def test_table_selection_prunes_large_schema():
     tables.append({"name": "INVOICES", "description": "billing", "columns": [{"name": "AMOUNT"}]})
     store = SchemaStore(SchemaPayload(tables=tables))
     assert store.select_tables("invoices amount", 5)[0].name == "INVOICES"
+
+
+# ---------- providers ----------
+def test_fallback_uses_next_provider_when_first_fails():
+    from app.providers import FallbackProvider, ProviderError
+
+    class Broken(LLMProvider):
+        name, model = "broken", "b"
+        def chat(self, *a, **k):
+            raise ProviderError("429 rate limit")
+
+    good = FakeProvider("hello")
+    chain = FallbackProvider([Broken(), good])
+    assert chain.chat([{"role": "user", "content": "hi"}]) == "hello"
+    assert chain.name == "fake" and chain.model == "fake-1"
+
+
+def test_fallback_raises_when_all_fail():
+    from app.providers import FallbackProvider, ProviderError
+
+    class Broken(LLMProvider):
+        name, model = "broken", "b"
+        def chat(self, *a, **k):
+            raise ProviderError("down")
+
+    with pytest.raises(ProviderError):
+        FallbackProvider([Broken(), Broken()]).chat([])
+
+
+def test_auto_skips_providers_without_keys(monkeypatch):
+    from app import providers
+    for k in ["GEMINI", "GROQ", "CEREBRAS", "MISTRAL", "OPENROUTER", "OPENAI"]:
+        monkeypatch.delenv(f"{k}_API_KEY", raising=False)
+    monkeypatch.setenv("GROQ_API_KEY", "x")
+    chain = providers.get_provider("auto")
+    assert [p.name for p in chain.providers] == ["groq", "local"]

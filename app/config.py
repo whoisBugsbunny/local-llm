@@ -1,22 +1,19 @@
 """All settings come from environment variables / the .env file."""
 from functools import lru_cache
 
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+load_dotenv()  # makes every .env line readable with os.getenv (used for provider keys)
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     service_api_key: str = "change-me"
-    default_provider: str = "openai"
-
-    openai_api_key: str = ""
-    openai_model: str = "gpt-4o-mini"
-    openai_base_url: str = "https://api.openai.com/v1"
-
-    local_base_url: str = "http://localhost:11434/v1"
-    local_model: str = "qwen2.5-coder:7b"
-    local_api_key: str = "ollama"  # Ollama ignores it, the SDK just needs something
+    default_provider: str = "auto"  # "auto" = try PROVIDER_ORDER in sequence
+    provider_order: str = "gemini,groq,cerebras,mistral,openrouter,local"
+    # Per-provider keys/models (GEMINI_API_KEY, GROQ_MODEL ...) are read in providers.py
 
     max_rows: int = 1000
     max_tables_in_prompt: int = 12
