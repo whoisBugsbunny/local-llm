@@ -1,10 +1,15 @@
 """All prompt text lives here, so you can tune the AI without touching logic."""
 
+from .config import get_settings
+
 SQL_SYSTEM = """You are a SQL expert for SAP HANA. Turn the user's question into ONE read-only query.
 
 Rules:
 - Use ONLY the tables and columns listed in the schema. Never invent names.
 - Do not put a schema name in front of tables; the application sets the schema.
+- SAP HANA is case sensitive: write EVERY column name in double quotes exactly as in the schema, e.g. T0."DocDate".
+    Table names are written without quotes. Always use table aliases (T0, T1, ...).
+- Follow the BUSINESS RULES section strictly (cancelled documents, financial year, credit notes ...).
 - Only SELECT (or WITH ... SELECT). One statement, no semicolon. Never write data-changing or DDL statements.
 - Use SAP HANA functions (ADD_DAYS, ADD_MONTHS, TO_DATE, TO_VARCHAR, CURRENT_DATE, YEAR(), MONTH(), IFNULL, LIMIT n).
 - Give aggregates readable aliases. Add ORDER BY for rankings / top-N / time series.
@@ -14,16 +19,29 @@ Reply with JSON only, in exactly this shape:
 {"sql": "<query or null>", "explanation": "<one or two plain sentences>", "clarifying_question": "<question or null>"}"""
 
 
-def build_sql_user_message(store, tables, question: str, previous_sql: str | None) -> str:
+def build_sql_user_message(
+    store, tables, question: str, previous_sql: str | None
+) -> str:
     parts = ["SCHEMA:\n" + store.describe(tables)]
+    rules = store.describe_rules()
+    if rules:
+        parts.append("BUSINESS RULES:\n" + rules)
     glossary = store.describe_glossary()
     if glossary:
         parts.append("GLOSSARY:\n" + glossary)
-    examples = store.select_examples(question)
+    cfg = get_settings()
+    examples = store.select_examples(
+        question, cfg.examples_per_prompt, cfg.max_example_chars
+    )
     if examples:
-        parts.append("EXAMPLES:\n" + "\n\n".join(f"Q: {e['question']}\nSQL:\n{e['sql']}" for e in examples))
+        parts.append(
+            "EXAMPLES (real, working queries from this company; literal values replace parameters):\n"
+            + "\n\n".join(f"Q: {e['question']}\nSQL:\n{e['sql']}" for e in examples)
+        )
     if previous_sql:
-        parts.append("PREVIOUS QUERY (the user may want a change to this one):\n" + previous_sql)
+        parts.append(
+            "PREVIOUS QUERY (the user may want a change to this one):\n" + previous_sql
+        )
     parts.append("QUESTION:\n" + question)
     return "\n\n".join(parts)
 
@@ -44,22 +62,23 @@ You will NOT see any data. You only know the column names and types of the query
 Rules: never fetch from the network, never use eval, cookies, or storage. Use only the listed column names."""
 
 VISUAL_SYSTEM = {
-    "spec": _VISUAL_COMMON + """
+    "spec": _VISUAL_COMMON
+    + """
 Return JSON only:
 {"chart_type": "bar|line|area|pie|table|kpi", "title": "...", "x": "<column or null>", "y": ["<numeric column>", ...], "notes": "..."}
 Pick the chart that best fits the request. "x" and every "y" must be column names from the list.""",
-
-    "tsx": _VISUAL_COMMON + """
+    "tsx": _VISUAL_COMMON
+    + """
 Return ONLY the code of one React + TypeScript component, no explanation, no markdown fences.
 Use: `export default function Visual({ rows }: { rows: Record<string, any>[] })`
 You may import from "react" and "recharts" only. Handle empty rows gracefully.""",
-
-    "html": _VISUAL_COMMON + """
+    "html": _VISUAL_COMMON
+    + """
 Return ONLY one self-contained HTML document (inline CSS and JS, no external scripts), no markdown fences.
 The page receives data with: window.addEventListener('message', e => { const rows = e.data.rows; ... })
 Draw the chart with inline SVG or canvas. Show a "no data" message when rows is empty.""",
-
-    "js": _VISUAL_COMMON + """
+    "js": _VISUAL_COMMON
+    + """
 Return ONLY plain JavaScript defining: function render(container, rows) { ... }
 `container` is a DOM element, `rows` is an array of objects. Draw using inline SVG or canvas inside container.""",
 }

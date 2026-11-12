@@ -180,3 +180,95 @@ def test_parse_json_ignores_think_block():
         '<think>maybe {"a": 1}</think>\n{"sql": "SELECT 1", "explanation": "x"}'
     )
     assert out["sql"] == "SELECT 1"
+
+
+# ---------- tools ----------
+def test_scan_finds_tables_aliases_ctes_and_columns():
+    import sys
+
+    sys.path.insert(0, "tools")
+    from sql_scan import scan_query
+
+    sql = """WITH B AS (SELECT T0."DocNum" FROM "VISHAL_LIVE"."OINV" T0 INNER JOIN INV1 T1 ON T0."DocEntry" = T1."DocEntry")
+            SELECT EXTRACT(YEAR FROM X."D") FROM B INNER JOIN oitm t2 ON t2."ItemCode" = 'a."b"' """
+    tables, cols = scan_query(sql)
+    assert tables == {"OINV", "INV1", "OITM"}
+    assert "DocNum" in cols["OINV"] and "ItemCode" in cols["OITM"]
+
+
+def test_examples_param_filling():
+    import sys
+
+    sys.path.insert(0, "tools")
+    from build_examples import fill_params
+
+    assert (
+        fill_params("WHERE d BETWEEN ? AND ?", ["From Date", "To Date"])
+        == "WHERE d BETWEEN '2025-04-01' AND '2026-03-31'"
+    )
+    assert fill_params("WHERE c = ? AND x = '?'", ["Customer Code"]) is None
+    assert "'?'" in fill_params("WHERE d = ? AND x = '?'", ["date"])
+
+
+def test_rules_and_quoting_reach_the_prompt():
+    from app import prompts
+
+    st = SchemaStore(
+        SchemaPayload(
+            rules=["Always filter CANCELED = 'N'"],
+            tables=[{"name": "OINV", "columns": [{"name": "DocDate"}]}],
+        )
+    )
+    msg = prompts.build_sql_user_message(st, st.payload.tables, "sales per month", None)
+    assert "BUSINESS RULES" in msg and "CANCELED" in msg
+    assert "double quotes" in prompts.SQL_SYSTEM
+
+
+# ---------- cache + concurrency ----------
+def test_answer_cache_avoids_second_model_call(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import main
+
+    main._CACHE.clear()
+    calls = {"n": 0}
+
+    def fake_generate(provider, store, question, previous_sql=None):
+        calls["n"] += 1
+        return {
+            "sql": "SELECT 1 FROM DUMMY",
+            "explanation": "x",
+            "clarifying_question": None,
+            "tables_used": [],
+        }
+
+    monkeypatch.setattr(main.service, "generate_sql", fake_generate)
+    monkeypatch.setattr(main, "get_provider", lambda *a, **k: FakeProvider())
+    c = TestClient(main.app)
+    h = {"X-API-Key": "change-me"}
+    body = {"question": "Total sales this month"}
+    r1 = c.post("/sql", headers=h, json=body).json()
+    r2 = c.post(
+        "/sql", headers=h, json={"question": "  total SALES this month "}
+    ).json()
+    assert calls["n"] == 1 and r1["cached"] is False and r2["cached"] is True
+
+
+def test_busy_provider_fails_fast_and_fallback_continues():
+    from app.providers import OpenAICompatibleProvider, FallbackProvider, ProviderError
+
+    busy = OpenAICompatibleProvider(
+        "busytest",
+        "k",
+        "http://127.0.0.1:9/v1",
+        "m",
+        timeout=1,
+        max_concurrent=1,
+        queue_timeout=0.2,
+    )
+    busy._sem.acquire()  # someone else is using the only lane
+    try:
+        with pytest.raises(ProviderError):
+            busy.chat([{"role": "user", "content": "hi"}])
+        assert FallbackProvider([busy, FakeProvider("ok")]).chat([]) == "ok"
+    finally:
+        busy._sem.release()

@@ -3,6 +3,7 @@ Holds table/column names + descriptions (NO data) and decides which part of the
 schema to put in the prompt. Small local models have small context windows, so we
 send only the most relevant tables instead of everything.
 """
+
 import json
 import re
 from pathlib import Path
@@ -23,8 +24,12 @@ class SchemaStore:
 
     # ---------- loading ----------
     @classmethod
-    def from_files(cls, schema_file: str, examples_file: str | None = None) -> "SchemaStore":
-        payload = SchemaPayload.model_validate(json.loads(Path(schema_file).read_text(encoding="utf-8")))
+    def from_files(
+        cls, schema_file: str, examples_file: str | None = None
+    ) -> "SchemaStore":
+        payload = SchemaPayload.model_validate(
+            json.loads(Path(schema_file).read_text(encoding="utf-8"))
+        )
         examples = []
         if examples_file and Path(examples_file).exists():
             examples = json.loads(Path(examples_file).read_text(encoding="utf-8"))
@@ -44,7 +49,10 @@ class SchemaStore:
             return tables
 
         q = _words(text)
-        for term, meaning in self.payload.glossary.items():  # expand "GRN" -> "goods receipt note"
+        for (
+            term,
+            meaning,
+        ) in self.payload.glossary.items():  # expand "GRN" -> "goods receipt note"
             if term.lower() in q:
                 q |= _words(meaning)
 
@@ -58,19 +66,34 @@ class SchemaStore:
         ranked = sorted(tables, key=score, reverse=True)
         return ranked[:limit]
 
-    def select_examples(self, question: str, k: int = 3) -> list[dict]:
+    def select_examples(
+        self, question: str, k: int = 3, max_chars: int = 2500
+    ) -> list[dict]:
         q = _words(question)
-        ranked = sorted(self.examples, key=lambda e: len(q & _words(e["question"])), reverse=True)
+        pool = [
+            e for e in self.examples if len(e["sql"]) <= max_chars
+        ]  # huge queries waste the prompt
+        ranked = sorted(
+            pool, key=lambda e: len(q & _words(e["question"])), reverse=True
+        )
         return [e for e in ranked[:k] if q & _words(e["question"])]
 
     # ---------- prompt text ----------
     def describe(self, tables: list) -> str:
         lines = []
         for t in tables:
-            lines.append(f"TABLE {t.name}" + (f"  -- {t.description}" if t.description else ""))
+            lines.append(
+                f"TABLE {t.name}" + (f"  -- {t.description}" if t.description else "")
+            )
             for c in t.columns:
-                lines.append(f"  {c.name} ({c.type})" + (f"  -- {c.description}" if c.description else ""))
+                lines.append(
+                    f"  {c.name} ({c.type})"
+                    + (f"  -- {c.description}" if c.description else "")
+                )
         return "\n".join(lines)
+
+    def describe_rules(self) -> str:
+        return "\n".join(f"- {r}" for r in self.payload.rules)
 
     def describe_glossary(self) -> str:
         return "\n".join(f"{k} = {v}" for k, v in self.payload.glossary.items())

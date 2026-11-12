@@ -4,8 +4,12 @@ HTTP layer. Start with:  uvicorn app.main:app --host 127.0.0.1 --port 8001
 Bind to 127.0.0.1 so ONLY your Node server (same machine / private network) can reach it.
 """
 
+import hashlib
 import hmac
+import json
 import logging
+import os
+import threading
 import time
 from functools import lru_cache
 
@@ -36,6 +40,54 @@ app = FastAPI(title="Internal AI service (SQL + visuals + chat)")
 def default_store() -> SchemaStore:
     s = get_settings()
     return SchemaStore.from_files(s.schema_file, s.examples_file)
+
+
+# ---------- tiny in-memory answer cache (same question + same schema = instant answer) ----------
+_CACHE: dict[str, tuple[float, dict]] = {}
+_CACHE_LOCK = threading.Lock()
+_CACHE_MAX = 500
+
+
+def cache_key(req: SqlRequest) -> str:
+    s = get_settings()
+    schema_part = (
+        req.schema_override.model_dump()
+        if req.schema_override
+        else os.path.getmtime(s.schema_file)
+    )
+    raw = json.dumps(
+        [
+            req.question.strip().lower(),
+            req.previous_sql,
+            req.provider,
+            req.model,
+            schema_part,
+        ],
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def cache_get(key: str):
+    ttl = get_settings().cache_ttl_seconds
+    if ttl <= 0:
+        return None
+    with _CACHE_LOCK:
+        hit = _CACHE.get(key)
+        if hit and time.time() - hit[0] < ttl:
+            return hit[1]
+        _CACHE.pop(key, None)
+    return None
+
+
+def cache_put(key: str, value: dict) -> None:
+    if get_settings().cache_ttl_seconds <= 0:
+        return
+    with _CACHE_LOCK:
+        if len(_CACHE) >= _CACHE_MAX:
+            _CACHE.pop(min(_CACHE, key=lambda k: _CACHE[k][0]))  # drop the oldest
+        _CACHE[key] = (time.time(), value)
 
 
 def require_key(x_api_key: str | None = Header(default=None)) -> None:
@@ -91,6 +143,10 @@ def provider_models(name: str):
 @app.post("/sql", response_model=SqlResponse, dependencies=[Depends(require_key)])
 def sql(req: SqlRequest):
     started_at = time.perf_counter()
+    key = cache_key(req)
+    hit = cache_get(key)
+    if hit:
+        return SqlResponse(**hit, cached=True)
     provider = get_provider(req.provider, req.model)
     result = service.generate_sql(
         provider, store_for(req.schema_override), req.question, req.previous_sql
@@ -98,12 +154,28 @@ def sql(req: SqlRequest):
     log.info(
         "sql generated provider=%s ok=%s", provider.name, bool(result["sql"])
     )  # never log the question text
-    return SqlResponse(
+    response = {
         **result,
-        provider=provider.name,
-        model=provider.model,
-        execution_time_ms=elapsed_ms(started_at),
-    )
+        "provider": provider.name,
+        "model": provider.model,
+        "execution_time_ms": elapsed_ms(started_at),
+    }
+    if result["sql"]:
+        cache_put(key, response)
+    return SqlResponse(**response)
+
+
+@app.post("/admin/reload", dependencies=[Depends(require_key)])
+def reload_schema():
+    """Re-read schema.json / examples.json without restarting (after running tools/build_schema.py)."""
+    default_store.cache_clear()
+    with _CACHE_LOCK:
+        _CACHE.clear()
+    return {
+        "ok": True,
+        "tables": len(default_store().payload.tables),
+        "examples": len(default_store().examples),
+    }
 
 
 @app.post("/sql/fix", response_model=SqlResponse, dependencies=[Depends(require_key)])
@@ -117,7 +189,7 @@ def sql_fix(req: SqlFixRequest):
         **result,
         provider=provider.name,
         model=provider.model,
-        execution_time_ms=elapsed_ms(started_at),
+        execution_time_ms=elapsed_ms(started_at)
     )
 
 

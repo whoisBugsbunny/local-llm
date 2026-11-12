@@ -21,7 +21,11 @@ class Settings(BaseSettings):
     max_repair_attempts: int = 2
     request_timeout: int = 60
     enforce_table_whitelist: bool = True
-
+    cache_ttl_seconds: int = (
+        600  # same question + same schema within 10 min = instant answer (0 = off)
+    )
+    examples_per_prompt: int = 3  # lower to 1-2 for small local models
+    max_example_chars: int = 2500  # examples longer than this are never put in a prompt
     schema_file: str = "schema/schema.json"
     examples_file: str = "schema/examples.json"
 

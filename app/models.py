@@ -1,4 +1,5 @@
 """Request / response shapes (validated automatically by FastAPI)."""
+
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -20,6 +21,9 @@ class Table(BaseModel):
 class SchemaPayload(BaseModel):
     schema_name: str = "VTF"
     glossary: dict[str, str] = {}
+    rules: list[str] = (
+        []
+    )  # business rules the model must follow (cancelled docs, financial year...)
     tables: list[Table]
 
 
@@ -37,8 +41,12 @@ class ChatMessage(BaseModel):
 # ---------- /sql ----------
 class SqlRequest(ProviderChoice):
     question: str = Field(min_length=3, max_length=2000)
-    previous_sql: Optional[str] = Field(None, max_length=20000, description="For follow-ups like 'now group by city'")
-    schema_override: Optional[SchemaPayload] = Field(None, description="Send a live schema instead of schema.json")
+    previous_sql: Optional[str] = Field(
+        None, max_length=20000, description="For follow-ups like 'now group by city'"
+    )
+    schema_override: Optional[SchemaPayload] = Field(
+        None, description="Send a live schema instead of schema.json"
+    )
 
 
 class SqlFixRequest(ProviderChoice):
@@ -56,6 +64,7 @@ class SqlResponse(BaseModel):
     provider: str
     model: str
     execution_time_ms: float
+    cached: bool = False
 
 
 # ---------- /visual ----------

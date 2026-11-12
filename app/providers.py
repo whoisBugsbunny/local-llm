@@ -17,6 +17,7 @@ GROQ_TIMEOUT=30               # seconds to wait before giving up and trying the 
 
 import logging
 import os
+import threading
 import time
 from abc import ABC, abstractmethod
 
@@ -25,6 +26,18 @@ from openai import OpenAI
 from .config import get_settings
 
 log = logging.getLogger("local-llm")
+
+
+_LIMITS: dict[str, threading.BoundedSemaphore] = {}
+_LIMITS_LOCK = threading.Lock()
+
+
+def _limiter(name: str, size: int) -> threading.BoundedSemaphore:
+    """One shared 'lane count' per provider, so 50 users cannot flood a small local model."""
+    with _LIMITS_LOCK:
+        if name not in _LIMITS:
+            _LIMITS[name] = threading.BoundedSemaphore(size)
+        return _LIMITS[name]
 
 
 class ProviderError(Exception):
@@ -63,8 +76,12 @@ class OpenAICompatibleProvider(LLMProvider):
         model: str,
         timeout: float,
         reasoning_effort: str | None = None,
+        max_concurrent: int = 8,
+        queue_timeout: float = 30,
     ):
         self.name = name
+        self._sem = _limiter(name, max_concurrent)
+        self._queue_timeout = queue_timeout
         self.model = model
         self.base_url = base_url
         self.reasoning_effort = reasoning_effort
@@ -74,6 +91,17 @@ class OpenAICompatibleProvider(LLMProvider):
         )
 
     def chat(self, messages, temperature=0.0, json_mode=False) -> str:
+        # wait for a free lane; if the queue is too long, fail fast so the next provider can answer
+        if not self._sem.acquire(timeout=self._queue_timeout):
+            raise ProviderError(
+                f"{self.name} is busy (all lanes taken for {self._queue_timeout:.0f}s)"
+            )
+        try:
+            return self._chat_once(messages, temperature, json_mode)
+        finally:
+            self._sem.release()
+
+    def _chat_once(self, messages, temperature, json_mode) -> str:
         base = dict(model=self.model, messages=messages, temperature=temperature)
         full = dict(base)
         if self.reasoning_effort:
@@ -152,12 +180,12 @@ _REGISTRY = {
     "groq": {
         "prefix": "GROQ",
         "base_url": "https://api.groq.com/openai/v1",
-        "model": "openai/gpt-oss-120b",
+        "model": "qwen/qwen3.8-27b",
     },
     "openrouter": {
         "prefix": "OPENROUTER",
         "base_url": "https://openrouter.ai/api/v1",
-        "model": "google/gemma-4-31b-it:free",
+        "model": "google/gemma-4-26b-a4b-it:free",
     },
     "openai": {
         "prefix": "OPENAI",
@@ -184,6 +212,11 @@ def _cfg(name: str) -> dict:
         "timeout": float(
             os.getenv(f"{p}_TIMEOUT", "") or get_settings().request_timeout
         ),
+        # how many requests may run at the same time on this provider (local model: keep it small)
+        "max_concurrent": int(
+            os.getenv(f"{p}_MAX_CONCURRENT", "") or (2 if name == "local" else 8)
+        ),
+        "queue_timeout": float(os.getenv(f"{p}_QUEUE_TIMEOUT", "") or 30),
     }
 
 
@@ -205,6 +238,8 @@ def _build(name: str, model: str | None = None) -> OpenAICompatibleProvider:
         model or cfg["model"],
         cfg["timeout"],
         cfg["reasoning_effort"],
+        cfg["max_concurrent"],
+        cfg["queue_timeout"],
     )
 
 

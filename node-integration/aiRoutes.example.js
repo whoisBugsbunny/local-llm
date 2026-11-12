@@ -17,14 +17,7 @@ router.post("/ai/report", async (req, res) => {
     try {
         // 1) ask the AI for SQL (only schema names go out, never data)
         let gen = await aiPost("/sql", { question, previous_sql: previousSql, provider, model });
-        if (!gen.sql) {
-            return res.json({
-                needsClarification: true,
-                question: gen.clarifying_question,
-                explanation: gen.explanation,
-                executionTimeMs: Number((performance.now() - startedAt).toFixed(2)),
-            });
-        }
+        if (!gen.sql) return res.json({ needsClarification: true, question: gen.clarifying_question, explanation: gen.explanation, executionTimeMs: Number((performance.now() - startedAt).toFixed(2)) });
 
         // 2) run it through the SAME safe runner you already use
         const run = (sql) => runReadOnlyQuery({
@@ -56,13 +49,7 @@ router.post("/ai/report", async (req, res) => {
             });
         }
 
-        return res.json({
-            ...mapped,
-            generatedSql: gen.sql,
-            explanation: gen.explanation,
-            visual,
-            executionTimeMs: Number((performance.now() - startedAt).toFixed(2)),
-        });
+        return res.json({ ...mapped, generatedSql: gen.sql, explanation: gen.explanation, visual, executionTimeMs: Number((performance.now() - startedAt).toFixed(2)) });
     } catch (err) {
         return handleRequestError(res, err, "AI report");
     }
@@ -71,8 +58,7 @@ router.post("/ai/report", async (req, res) => {
 router.post("/ai/chat", async (req, res) => {
     if (!getUserId(req, res)) return;
     try {
-        const result = await aiPost("/chat", req.body);
-        return res.json(result);
+        return res.json(await aiPost("/chat", req.body));
     } catch (err) {
         return handleRequestError(res, err, "AI chat");
     }
