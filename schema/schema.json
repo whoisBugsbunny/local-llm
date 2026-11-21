@@ -5,26 +5,4883 @@
     "PO": "purchase order",
     "revenue": "sales amount"
   },
+  "rules": [
+    "Always exclude cancelled documents: T0.\"CANCELED\" = 'N' on OINV, ORIN, OPCH, ORPC, ORDR, OPOR, OPDN, OPRQ, OIGE, OIGN.",
+    "Sales = A/R invoices (OINV + INV1) MINUS A/R credit memos (ORIN + RIN1): combine with UNION ALL and make credit memo amounts negative.",
+    "Purchases = A/P invoices (OPCH + PCH1) MINUS A/P credit memos (ORPC + RPC1).",
+    "Net sales amount in INR = SUM(LineTotal); apply header discount with LineTotal - LineTotal * DiscPrcnt / 100 when asked for net.",
+    "Financial year starts on 1 April: FY = CASE WHEN MONTH(date) >= 4 THEN YEAR(date) ELSE YEAR(date) - 1 END; FY month number = CASE WHEN MONTH(date) >= 4 THEN MONTH(date) - 3 ELSE MONTH(date) + 9 END.",
+    "Export customers have OCRD.GroupCode = '100' and foreign currency (DocCur <> 'INR'); everything else is domestic. Foreign amounts are in DocTotalFC / TotalFrgn.",
+    "Open orders: header DocStatus = 'O' and line LineStatus = 'O' (or OpenQty > 0).",
+    "Current stock per warehouse is OITW.OnHand; stock valuation / ledger comes from OINM: SUM(InQty - OutQty) and SUM(TransValue) with DocDate <= the as-on date.",
+    "Document chain uses BaseType / BaseEntry / BaseLine: purchase request (1470000113) > purchase order (22) > GRPO (20) > A/P invoice (18); sales order (17) > delivery (15) > A/R invoice (13); production order = 202.",
+    "Item group names come from OITB joined on ItmsGrpCod; business partner group names from OCRG joined on GroupCode.",
+    "Month and year filters: use YEAR(date) = ... and MONTH(date) = ...; 'today' = CURRENT_DATE; 'last 30 days' = date >= ADD_DAYS(CURRENT_DATE, -30)."
+  ],
   "tables": [
     {
-      "name": "SALES_ORDERS",
-      "description": "One row per sales order header",
+      "name": "OITM",
+      "description": "Item master (products, materials). One row per item",
       "columns": [
-        {"name": "ORDER_ID", "type": "NVARCHAR", "description": "Order number"},
-        {"name": "CUSTOMER_ID", "type": "NVARCHAR", "description": "Links to CUSTOMERS.CUSTOMER_ID"},
-        {"name": "ORDER_DATE", "type": "DATE", "description": ""},
-        {"name": "TOTAL_AMOUNT", "type": "DECIMAL", "description": "Order value in INR"},
-        {"name": "STATUS", "type": "NVARCHAR", "description": "OPEN, SHIPPED, CANCELLED"}
+        {
+          "name": "ItemCode",
+          "type": "unknown",
+          "description": "item code"
+        },
+        {
+          "name": "ItmsGrpCod",
+          "type": "unknown",
+          "description": "item group code (OITB)"
+        },
+        {
+          "name": "ItemName",
+          "type": "unknown",
+          "description": "item name"
+        },
+        {
+          "name": "U_SUBGRP",
+          "type": "unknown",
+          "description": "production stage / item sub group (FORGING, BROACHING, ELECTROPLATING ...)"
+        },
+        {
+          "name": "U_MSTRCTN",
+          "type": "unknown",
+          "description": "pieces per master carton"
+        },
+        {
+          "name": "U_VMS",
+          "type": "unknown",
+          "description": "item family code used to group items"
+        },
+        {
+          "name": "U_ITMSZ",
+          "type": "unknown",
+          "description": "item size"
+        },
+        {
+          "name": "IWeight1",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_BRND",
+          "type": "unknown",
+          "description": "brand"
+        },
+        {
+          "name": "PrcrmntMtd",
+          "type": "unknown",
+          "description": "'M' make, 'B' buy"
+        },
+        {
+          "name": "U_ITMSECTION",
+          "type": "unknown",
+          "description": "production section of the item"
+        },
+        {
+          "name": "U_ITMREGCOD",
+          "type": "unknown",
+          "description": "item regular code"
+        },
+        {
+          "name": "OnHand",
+          "type": "unknown",
+          "description": "stock quantity on hand"
+        },
+        {
+          "name": "SVolume",
+          "type": "unknown",
+          "description": "volume per master carton (CBM)"
+        },
+        {
+          "name": "U_PRDTYP",
+          "type": "unknown",
+          "description": "product type / stage"
+        },
+        {
+          "name": "SWeight1",
+          "type": "unknown",
+          "description": "net weight per piece"
+        },
+        {
+          "name": "U_ITMWT",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_GRSWT",
+          "type": "unknown",
+          "description": "gross weight per master carton"
+        },
+        {
+          "name": "U_OLDERPCOD",
+          "type": "unknown",
+          "description": "older ERP product code"
+        },
+        {
+          "name": "U_CUSTITMCOD",
+          "type": "unknown",
+          "description": "customer item code"
+        },
+        {
+          "name": "InvntryUom",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ChapterID",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "SLength1",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "SWidth1",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "SHeight1",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "InvntItem",
+          "type": "unknown",
+          "description": "'Y' = stock item"
+        },
+        {
+          "name": "U_SEMICTN",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "CreateDate",
+          "type": "unknown",
+          "description": "date the record was created"
+        },
+        {
+          "name": "LstEvlPric",
+          "type": "unknown",
+          "description": "last evaluated price"
+        },
+        {
+          "name": "U_PKGDEC",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "CodeBars",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_MCWT",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "AvgPrice",
+          "type": "unknown",
+          "description": "moving average price"
+        },
+        {
+          "name": "ItemClass",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_SCWT",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "SalUnitMsr",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_PC",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_NXTSECTION",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_PRESECTION",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "validFor",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "LastPurPrc",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "LastPurDat",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_PROP",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_Pallet",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_ITMSZ1",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "UserText",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DfltWH",
+          "type": "unknown",
+          "description": ""
+        }
       ]
     },
     {
-      "name": "CUSTOMERS",
-      "description": "Customer master data",
+      "name": "OITB",
+      "description": "Item groups (ItmsGrpCod -> ItmsGrpNam)",
       "columns": [
-        {"name": "CUSTOMER_ID", "type": "NVARCHAR", "description": ""},
-        {"name": "CUSTOMER_NAME", "type": "NVARCHAR", "description": ""},
-        {"name": "CITY", "type": "NVARCHAR", "description": ""},
-        {"name": "STATE", "type": "NVARCHAR", "description": ""}
+        {
+          "name": "ItmsGrpNam",
+          "type": "unknown",
+          "description": "item group name"
+        },
+        {
+          "name": "ItmsGrpCod",
+          "type": "unknown",
+          "description": "item group code (OITB)"
+        },
+        {
+          "name": "U_ITMTYP",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "BalInvntAc",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OCRD",
+      "description": "Business partners (customers CardType 'C', vendors 'S')",
+      "columns": [
+        {
+          "name": "CardCode",
+          "type": "unknown",
+          "description": "business partner code"
+        },
+        {
+          "name": "GroupCode",
+          "type": "unknown",
+          "description": "business partner group code (OCRG); 100 = export customers"
+        },
+        {
+          "name": "CardName",
+          "type": "unknown",
+          "description": "business partner name"
+        },
+        {
+          "name": "CardType",
+          "type": "unknown",
+          "description": "'C' customer, 'S' vendor, 'L' lead"
+        },
+        {
+          "name": "U_BRAND",
+          "type": "unknown",
+          "description": "brand"
+        },
+        {
+          "name": "LicTradNum",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_PurchType",
+          "type": "unknown",
+          "description": "vendor purchase type C consumables, S service, B brought-out"
+        },
+        {
+          "name": "E_Mail",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "validFor",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Phone1",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "CntctPrsn",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "CardFName",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OINV",
+      "description": "A/R Invoice header (sales invoice). One row per sales invoice",
+      "columns": [
+        {
+          "name": "DocDate",
+          "type": "unknown",
+          "description": "posting date"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "CardCode",
+          "type": "unknown",
+          "description": "business partner code"
+        },
+        {
+          "name": "CANCELED",
+          "type": "unknown",
+          "description": "'Y' = cancelled, 'N' = valid. Always filter CANCELED = 'N'"
+        },
+        {
+          "name": "CardName",
+          "type": "unknown",
+          "description": "business partner name"
+        },
+        {
+          "name": "DocTotal",
+          "type": "unknown",
+          "description": "document total in INR incl. tax"
+        },
+        {
+          "name": "DocCur",
+          "type": "unknown",
+          "description": "document currency; 'INR' = local, anything else = foreign (export)"
+        },
+        {
+          "name": "DocNum",
+          "type": "unknown",
+          "description": "document number shown to users"
+        },
+        {
+          "name": "DiscSum",
+          "type": "unknown",
+          "description": "header discount amount"
+        },
+        {
+          "name": "DiscPrcnt",
+          "type": "unknown",
+          "description": "header discount percent"
+        },
+        {
+          "name": "DocTotalFC",
+          "type": "unknown",
+          "description": "document total in foreign currency"
+        },
+        {
+          "name": "DocRate",
+          "type": "unknown",
+          "description": "exchange rate to INR"
+        },
+        {
+          "name": "DocStatus",
+          "type": "unknown",
+          "description": "'O' = open, 'C' = closed"
+        },
+        {
+          "name": "NumAtCard",
+          "type": "unknown",
+          "description": "customer / vendor reference number"
+        },
+        {
+          "name": "TaxDate",
+          "type": "unknown",
+          "description": "document date"
+        },
+        {
+          "name": "DocType",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VatSum",
+          "type": "unknown",
+          "description": "tax amount"
+        },
+        {
+          "name": "DiscSumFC",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "PayToCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ShipToCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "PaidToDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DocDueDate",
+          "type": "unknown",
+          "description": "due / delivery date"
+        },
+        {
+          "name": "U_FCLC",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_ADDATE",
+          "type": "unknown",
+          "description": "actual delivery date"
+        },
+        {
+          "name": "U_SPBLNO",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_BLDT",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "GroupNum",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Address2",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_INSTYP",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_DBKDATE",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_DBKCLAIM",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_IGSTRECPTDT",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_IGSTAMT",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_RDTDATE",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_RTEPAMT",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Address",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "BPLName",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "WTSum",
+          "type": "unknown",
+          "description": "withholding tax amount"
+        },
+        {
+          "name": "BPLId",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_CRDT",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_PODSC",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_BLNO",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_BRSAMT",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_BRSAMT2",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_BRSAMT3",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_AMTUND",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DocSubType",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_POFD",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_CSNMAG",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_NMARL",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_STUFDT",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_RAILOUT",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_ONBRD",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_SCRIPNO",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_SCRIPDT",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_SCRIPVDT",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "TotalExpns",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "LicTradNum",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_BNKREF",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_BNKDT",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "ORDR",
+      "description": "Sales Order header (customer order)",
+      "columns": [
+        {
+          "name": "DocDate",
+          "type": "unknown",
+          "description": "posting date"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "CardCode",
+          "type": "unknown",
+          "description": "business partner code"
+        },
+        {
+          "name": "DocNum",
+          "type": "unknown",
+          "description": "document number shown to users"
+        },
+        {
+          "name": "DocTotal",
+          "type": "unknown",
+          "description": "document total in INR incl. tax"
+        },
+        {
+          "name": "DocStatus",
+          "type": "unknown",
+          "description": "'O' = open, 'C' = closed"
+        },
+        {
+          "name": "CardName",
+          "type": "unknown",
+          "description": "business partner name"
+        },
+        {
+          "name": "CANCELED",
+          "type": "unknown",
+          "description": "'Y' = cancelled, 'N' = valid. Always filter CANCELED = 'N'"
+        },
+        {
+          "name": "DocDueDate",
+          "type": "unknown",
+          "description": "due / delivery date"
+        },
+        {
+          "name": "NumAtCard",
+          "type": "unknown",
+          "description": "customer / vendor reference number"
+        },
+        {
+          "name": "DiscSum",
+          "type": "unknown",
+          "description": "header discount amount"
+        },
+        {
+          "name": "CreateDate",
+          "type": "unknown",
+          "description": "date the record was created"
+        },
+        {
+          "name": "VatSum",
+          "type": "unknown",
+          "description": "tax amount"
+        },
+        {
+          "name": "DocCur",
+          "type": "unknown",
+          "description": "document currency; 'INR' = local, anything else = foreign (export)"
+        },
+        {
+          "name": "TotalExpns",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "RoundDif",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DocRate",
+          "type": "unknown",
+          "description": "exchange rate to INR"
+        },
+        {
+          "name": "TaxDate",
+          "type": "unknown",
+          "description": "document date"
+        },
+        {
+          "name": "BPLId",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DocType",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DocTime",
+          "type": "unknown",
+          "description": "creation time as HHMM number"
+        },
+        {
+          "name": "BPLName",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_ADDATE",
+          "type": "unknown",
+          "description": "actual delivery date"
+        },
+        {
+          "name": "CreateTS",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ShipToCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Series",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Indicator",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "WTSum",
+          "type": "unknown",
+          "description": "withholding tax amount"
+        },
+        {
+          "name": "UpdateDate",
+          "type": "unknown",
+          "description": "last update date"
+        },
+        {
+          "name": "Address",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Address2",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_CDDATE",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Comments",
+          "type": "unknown",
+          "description": "free text remarks"
+        },
+        {
+          "name": "DocTotalFC",
+          "type": "unknown",
+          "description": "document total in foreign currency"
+        },
+        {
+          "name": "U_FCLC",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "INV1",
+      "description": "A/R Invoice lines (items sold). Join OINV.DocEntry = INV1.DocEntry",
+      "columns": [
+        {
+          "name": "LineTotal",
+          "type": "unknown",
+          "description": "line amount in local currency (INR) before header discount and tax"
+        },
+        {
+          "name": "TaxCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ItemCode",
+          "type": "unknown",
+          "description": "item code"
+        },
+        {
+          "name": "Quantity",
+          "type": "unknown",
+          "description": "quantity"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "VatSum",
+          "type": "unknown",
+          "description": "tax amount"
+        },
+        {
+          "name": "TotalFrgn",
+          "type": "unknown",
+          "description": "line amount in foreign currency"
+        },
+        {
+          "name": "Dscription",
+          "type": "unknown",
+          "description": "item description on the document line"
+        },
+        {
+          "name": "Price",
+          "type": "unknown",
+          "description": "unit price"
+        },
+        {
+          "name": "U_DBKCV",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_DBK",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "LineNum",
+          "type": "unknown",
+          "description": "line number inside a document"
+        },
+        {
+          "name": "U_DBKF",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "OpenQty",
+          "type": "unknown",
+          "description": "quantity still open (not yet delivered / received / invoiced)"
+        },
+        {
+          "name": "BaseEntry",
+          "type": "unknown",
+          "description": "DocEntry of the source document"
+        },
+        {
+          "name": "BaseLine",
+          "type": "unknown",
+          "description": "LineNum of the source document line"
+        },
+        {
+          "name": "BaseType",
+          "type": "unknown",
+          "description": "object type of the source document (13 A/R invoice, 15 delivery, 17 sales order, 18 A/P invoice, 20 GRPO, 22 purchase order, 202 production order, 1470000113 purchase request)"
+        },
+        {
+          "name": "UomCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VatPrcnt",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "LineStatus",
+          "type": "unknown",
+          "description": "line status 'O' open, 'C' closed"
+        },
+        {
+          "name": "PriceBefDi",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DiscPrcnt",
+          "type": "unknown",
+          "description": "header discount percent"
+        },
+        {
+          "name": "WhsCode",
+          "type": "unknown",
+          "description": "warehouse code"
+        },
+        {
+          "name": "DocDate",
+          "type": "unknown",
+          "description": "posting date"
+        }
+      ]
+    },
+    {
+      "name": "OPCH",
+      "description": "A/P Invoice header (purchase invoice from vendor)",
+      "columns": [
+        {
+          "name": "DocDate",
+          "type": "unknown",
+          "description": "posting date"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "CANCELED",
+          "type": "unknown",
+          "description": "'Y' = cancelled, 'N' = valid. Always filter CANCELED = 'N'"
+        },
+        {
+          "name": "CardCode",
+          "type": "unknown",
+          "description": "business partner code"
+        },
+        {
+          "name": "DocNum",
+          "type": "unknown",
+          "description": "document number shown to users"
+        },
+        {
+          "name": "CardName",
+          "type": "unknown",
+          "description": "business partner name"
+        },
+        {
+          "name": "DocTime",
+          "type": "unknown",
+          "description": "creation time as HHMM number"
+        },
+        {
+          "name": "CreateDate",
+          "type": "unknown",
+          "description": "date the record was created"
+        },
+        {
+          "name": "DiscSum",
+          "type": "unknown",
+          "description": "header discount amount"
+        },
+        {
+          "name": "WTSum",
+          "type": "unknown",
+          "description": "withholding tax amount"
+        },
+        {
+          "name": "DiscPrcnt",
+          "type": "unknown",
+          "description": "header discount percent"
+        },
+        {
+          "name": "NumAtCard",
+          "type": "unknown",
+          "description": "customer / vendor reference number"
+        },
+        {
+          "name": "DocStatus",
+          "type": "unknown",
+          "description": "'O' = open, 'C' = closed"
+        },
+        {
+          "name": "DocTotal",
+          "type": "unknown",
+          "description": "document total in INR incl. tax"
+        },
+        {
+          "name": "DocType",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VatSum",
+          "type": "unknown",
+          "description": "tax amount"
+        },
+        {
+          "name": "TaxDate",
+          "type": "unknown",
+          "description": "document date"
+        },
+        {
+          "name": "BPLName",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DocDueDate",
+          "type": "unknown",
+          "description": "due / delivery date"
+        },
+        {
+          "name": "UserSign",
+          "type": "unknown",
+          "description": "user id who created the document (OUSR.USERID)"
+        },
+        {
+          "name": "PayToCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "BPLId",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Comments",
+          "type": "unknown",
+          "description": "free text remarks"
+        },
+        {
+          "name": "Series",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Indicator",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "TotalExpns",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "RoundDif",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "GSTTranTyp",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Address",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Address2",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ShipToCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Ref1",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Ref2",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "PaidToDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DpmAmnt",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DpmAppl",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "TransId",
+          "type": "unknown",
+          "description": "journal entry number"
+        },
+        {
+          "name": "LicTradNum",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "ORIN",
+      "description": "A/R Credit Memo header (sales return / credit note). Subtract from sales",
+      "columns": [
+        {
+          "name": "DocDate",
+          "type": "unknown",
+          "description": "posting date"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "CardCode",
+          "type": "unknown",
+          "description": "business partner code"
+        },
+        {
+          "name": "CANCELED",
+          "type": "unknown",
+          "description": "'Y' = cancelled, 'N' = valid. Always filter CANCELED = 'N'"
+        },
+        {
+          "name": "DiscPrcnt",
+          "type": "unknown",
+          "description": "header discount percent"
+        },
+        {
+          "name": "DiscSum",
+          "type": "unknown",
+          "description": "header discount amount"
+        },
+        {
+          "name": "CardName",
+          "type": "unknown",
+          "description": "business partner name"
+        },
+        {
+          "name": "DocTotal",
+          "type": "unknown",
+          "description": "document total in INR incl. tax"
+        },
+        {
+          "name": "DocNum",
+          "type": "unknown",
+          "description": "document number shown to users"
+        },
+        {
+          "name": "DocCur",
+          "type": "unknown",
+          "description": "document currency; 'INR' = local, anything else = foreign (export)"
+        },
+        {
+          "name": "TaxDate",
+          "type": "unknown",
+          "description": "document date"
+        },
+        {
+          "name": "DocType",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VatSum",
+          "type": "unknown",
+          "description": "tax amount"
+        },
+        {
+          "name": "NumAtCard",
+          "type": "unknown",
+          "description": "customer / vendor reference number"
+        },
+        {
+          "name": "DocStatus",
+          "type": "unknown",
+          "description": "'O' = open, 'C' = closed"
+        },
+        {
+          "name": "PayToCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ShipToCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DocRate",
+          "type": "unknown",
+          "description": "exchange rate to INR"
+        },
+        {
+          "name": "Address2",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Address",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DiscSumFC",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "BPLName",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "WTSum",
+          "type": "unknown",
+          "description": "withholding tax amount"
+        },
+        {
+          "name": "DocDueDate",
+          "type": "unknown",
+          "description": "due / delivery date"
+        },
+        {
+          "name": "BPLId",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "TotalExpns",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "LicTradNum",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "RDR1",
+      "description": "Sales Order lines. OpenQty = quantity still to be delivered",
+      "columns": [
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "Quantity",
+          "type": "unknown",
+          "description": "quantity"
+        },
+        {
+          "name": "ItemCode",
+          "type": "unknown",
+          "description": "item code"
+        },
+        {
+          "name": "OpenQty",
+          "type": "unknown",
+          "description": "quantity still open (not yet delivered / received / invoiced)"
+        },
+        {
+          "name": "LineTotal",
+          "type": "unknown",
+          "description": "line amount in local currency (INR) before header discount and tax"
+        },
+        {
+          "name": "LineNum",
+          "type": "unknown",
+          "description": "line number inside a document"
+        },
+        {
+          "name": "Dscription",
+          "type": "unknown",
+          "description": "item description on the document line"
+        },
+        {
+          "name": "LineStatus",
+          "type": "unknown",
+          "description": "line status 'O' open, 'C' closed"
+        },
+        {
+          "name": "Price",
+          "type": "unknown",
+          "description": "unit price"
+        },
+        {
+          "name": "Currency",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "UomCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "OpenSum",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "OpenSumFC",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "TaxCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VatPrcnt",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ShipDate",
+          "type": "unknown",
+          "description": "line delivery date"
+        },
+        {
+          "name": "TotalFrgn",
+          "type": "unknown",
+          "description": "line amount in foreign currency"
+        },
+        {
+          "name": "VisOrder",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "PriceBefDi",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "WhsCode",
+          "type": "unknown",
+          "description": "warehouse code"
+        },
+        {
+          "name": "Rate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_REMKS",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "PCH1",
+      "description": "A/P Invoice lines",
+      "columns": [
+        {
+          "name": "LineTotal",
+          "type": "unknown",
+          "description": "line amount in local currency (INR) before header discount and tax"
+        },
+        {
+          "name": "TaxCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VatSum",
+          "type": "unknown",
+          "description": "tax amount"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "ItemCode",
+          "type": "unknown",
+          "description": "item code"
+        },
+        {
+          "name": "Quantity",
+          "type": "unknown",
+          "description": "quantity"
+        },
+        {
+          "name": "Price",
+          "type": "unknown",
+          "description": "unit price"
+        },
+        {
+          "name": "BaseEntry",
+          "type": "unknown",
+          "description": "DocEntry of the source document"
+        },
+        {
+          "name": "BaseType",
+          "type": "unknown",
+          "description": "object type of the source document (13 A/R invoice, 15 delivery, 17 sales order, 18 A/P invoice, 20 GRPO, 22 purchase order, 202 production order, 1470000113 purchase request)"
+        },
+        {
+          "name": "BaseLine",
+          "type": "unknown",
+          "description": "LineNum of the source document line"
+        },
+        {
+          "name": "LineNum",
+          "type": "unknown",
+          "description": "line number inside a document"
+        },
+        {
+          "name": "Dscription",
+          "type": "unknown",
+          "description": "item description on the document line"
+        },
+        {
+          "name": "OpenQty",
+          "type": "unknown",
+          "description": "quantity still open (not yet delivered / received / invoiced)"
+        },
+        {
+          "name": "DiscPrcnt",
+          "type": "unknown",
+          "description": "header discount percent"
+        },
+        {
+          "name": "VatPrcnt",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "unitMsr",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "WhsCode",
+          "type": "unknown",
+          "description": "warehouse code"
+        },
+        {
+          "name": "UomCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "LineStatus",
+          "type": "unknown",
+          "description": "line status 'O' open, 'C' closed"
+        },
+        {
+          "name": "A_Target_TS",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "A_TS",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "A_Line",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "BaseRef",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "AcctCode",
+          "type": "unknown",
+          "description": "G/L account code"
+        },
+        {
+          "name": "A_DocEntry",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "R_DocEntry",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "R_Line",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "A_No",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "A_Owner",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "A_Qty",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "PO_DocEntry",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "PO_Line",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "RIN1",
+      "description": "A/R Credit Memo lines",
+      "columns": [
+        {
+          "name": "LineTotal",
+          "type": "unknown",
+          "description": "line amount in local currency (INR) before header discount and tax"
+        },
+        {
+          "name": "TaxCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VatSum",
+          "type": "unknown",
+          "description": "tax amount"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "ItemCode",
+          "type": "unknown",
+          "description": "item code"
+        },
+        {
+          "name": "TotalFrgn",
+          "type": "unknown",
+          "description": "line amount in foreign currency"
+        },
+        {
+          "name": "Quantity",
+          "type": "unknown",
+          "description": "quantity"
+        },
+        {
+          "name": "Dscription",
+          "type": "unknown",
+          "description": "item description on the document line"
+        },
+        {
+          "name": "Price",
+          "type": "unknown",
+          "description": "unit price"
+        },
+        {
+          "name": "BaseEntry",
+          "type": "unknown",
+          "description": "DocEntry of the source document"
+        },
+        {
+          "name": "LineNum",
+          "type": "unknown",
+          "description": "line number inside a document"
+        },
+        {
+          "name": "OpenQty",
+          "type": "unknown",
+          "description": "quantity still open (not yet delivered / received / invoiced)"
+        },
+        {
+          "name": "UomCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VatPrcnt",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "LineStatus",
+          "type": "unknown",
+          "description": "line status 'O' open, 'C' closed"
+        },
+        {
+          "name": "BaseType",
+          "type": "unknown",
+          "description": "object type of the source document (13 A/R invoice, 15 delivery, 17 sales order, 18 A/P invoice, 20 GRPO, 22 purchase order, 202 production order, 1470000113 purchase request)"
+        },
+        {
+          "name": "BaseLine",
+          "type": "unknown",
+          "description": "LineNum of the source document line"
+        }
+      ]
+    },
+    {
+      "name": "POR1",
+      "description": "Purchase Order lines. OpenQty = still to be received",
+      "columns": [
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "LineNum",
+          "type": "unknown",
+          "description": "line number inside a document"
+        },
+        {
+          "name": "ShipDate",
+          "type": "unknown",
+          "description": "line delivery date"
+        },
+        {
+          "name": "Quantity",
+          "type": "unknown",
+          "description": "quantity"
+        },
+        {
+          "name": "ItemCode",
+          "type": "unknown",
+          "description": "item code"
+        },
+        {
+          "name": "Price",
+          "type": "unknown",
+          "description": "unit price"
+        },
+        {
+          "name": "OpenQty",
+          "type": "unknown",
+          "description": "quantity still open (not yet delivered / received / invoiced)"
+        },
+        {
+          "name": "LineTotal",
+          "type": "unknown",
+          "description": "line amount in local currency (INR) before header discount and tax"
+        },
+        {
+          "name": "Dscription",
+          "type": "unknown",
+          "description": "item description on the document line"
+        },
+        {
+          "name": "BaseEntry",
+          "type": "unknown",
+          "description": "DocEntry of the source document"
+        },
+        {
+          "name": "BaseType",
+          "type": "unknown",
+          "description": "object type of the source document (13 A/R invoice, 15 delivery, 17 sales order, 18 A/P invoice, 20 GRPO, 22 purchase order, 202 production order, 1470000113 purchase request)"
+        },
+        {
+          "name": "BaseLine",
+          "type": "unknown",
+          "description": "LineNum of the source document line"
+        },
+        {
+          "name": "LineStatus",
+          "type": "unknown",
+          "description": "line status 'O' open, 'C' closed"
+        },
+        {
+          "name": "VatSum",
+          "type": "unknown",
+          "description": "tax amount"
+        },
+        {
+          "name": "UomCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "TaxCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VatPrcnt",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_Remarks",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OPOR",
+      "description": "Purchase Order header",
+      "columns": [
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "DocNum",
+          "type": "unknown",
+          "description": "document number shown to users"
+        },
+        {
+          "name": "DocDueDate",
+          "type": "unknown",
+          "description": "due / delivery date"
+        },
+        {
+          "name": "DocDate",
+          "type": "unknown",
+          "description": "posting date"
+        },
+        {
+          "name": "CANCELED",
+          "type": "unknown",
+          "description": "'Y' = cancelled, 'N' = valid. Always filter CANCELED = 'N'"
+        },
+        {
+          "name": "CreateDate",
+          "type": "unknown",
+          "description": "date the record was created"
+        },
+        {
+          "name": "DocTime",
+          "type": "unknown",
+          "description": "creation time as HHMM number"
+        },
+        {
+          "name": "DocStatus",
+          "type": "unknown",
+          "description": "'O' = open, 'C' = closed"
+        },
+        {
+          "name": "CardCode",
+          "type": "unknown",
+          "description": "business partner code"
+        },
+        {
+          "name": "CardName",
+          "type": "unknown",
+          "description": "business partner name"
+        },
+        {
+          "name": "NumAtCard",
+          "type": "unknown",
+          "description": "customer / vendor reference number"
+        },
+        {
+          "name": "WTSum",
+          "type": "unknown",
+          "description": "withholding tax amount"
+        },
+        {
+          "name": "DocTotal",
+          "type": "unknown",
+          "description": "document total in INR incl. tax"
+        },
+        {
+          "name": "UserSign",
+          "type": "unknown",
+          "description": "user id who created the document (OUSR.USERID)"
+        },
+        {
+          "name": "VatSum",
+          "type": "unknown",
+          "description": "tax amount"
+        },
+        {
+          "name": "TaxDate",
+          "type": "unknown",
+          "description": "document date"
+        },
+        {
+          "name": "BPLName",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_W_ORDER",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DiscSum",
+          "type": "unknown",
+          "description": "header discount amount"
+        },
+        {
+          "name": "DocType",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DiscPrcnt",
+          "type": "unknown",
+          "description": "header discount percent"
+        },
+        {
+          "name": "CreateTS",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Comments",
+          "type": "unknown",
+          "description": "free text remarks"
+        },
+        {
+          "name": "BPLId",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "StrDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "PaidToDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "EndDate",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OUSR",
+      "description": "Users (USERID, U_NAME)",
+      "columns": [
+        {
+          "name": "U_NAME",
+          "type": "unknown",
+          "description": "user name"
+        },
+        {
+          "name": "USERID",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "G_TS",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "USER_CODE",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "E_Mail",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "G_No",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "G_Owner",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Gate_Qty",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "GRPO_Qty",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "PO_DocEntry",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "PO_Line",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "RN",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OCRG",
+      "description": "Business partner groups (GroupCode -> GroupName)",
+      "columns": [
+        {
+          "name": "GroupName",
+          "type": "unknown",
+          "description": "business partner group name"
+        },
+        {
+          "name": "GroupCode",
+          "type": "unknown",
+          "description": "business partner group code (OCRG); 100 = export customers"
+        },
+        {
+          "name": "GroupType",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OWHS",
+      "description": "Warehouses",
+      "columns": [
+        {
+          "name": "WhsName",
+          "type": "unknown",
+          "description": "warehouse name"
+        },
+        {
+          "name": "WhsCode",
+          "type": "unknown",
+          "description": "warehouse code"
+        }
+      ]
+    },
+    {
+      "name": "PRQ1",
+      "description": "Purchase Request lines",
+      "columns": [
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "LineNum",
+          "type": "unknown",
+          "description": "line number inside a document"
+        },
+        {
+          "name": "Quantity",
+          "type": "unknown",
+          "description": "quantity"
+        },
+        {
+          "name": "ItemCode",
+          "type": "unknown",
+          "description": "item code"
+        },
+        {
+          "name": "OpenQty",
+          "type": "unknown",
+          "description": "quantity still open (not yet delivered / received / invoiced)"
+        },
+        {
+          "name": "Dscription",
+          "type": "unknown",
+          "description": "item description on the document line"
+        },
+        {
+          "name": "LineStatus",
+          "type": "unknown",
+          "description": "line status 'O' open, 'C' closed"
+        },
+        {
+          "name": "BaseType",
+          "type": "unknown",
+          "description": "object type of the source document (13 A/R invoice, 15 delivery, 17 sales order, 18 A/P invoice, 20 GRPO, 22 purchase order, 202 production order, 1470000113 purchase request)"
+        },
+        {
+          "name": "BaseEntry",
+          "type": "unknown",
+          "description": "DocEntry of the source document"
+        },
+        {
+          "name": "ShipDate",
+          "type": "unknown",
+          "description": "line delivery date"
+        },
+        {
+          "name": "WhsCode",
+          "type": "unknown",
+          "description": "warehouse code"
+        },
+        {
+          "name": "BaseLine",
+          "type": "unknown",
+          "description": "LineNum of the source document line"
+        }
+      ]
+    },
+    {
+      "name": "OPRQ",
+      "description": "Purchase Request (PR) header",
+      "columns": [
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "CreateDate",
+          "type": "unknown",
+          "description": "date the record was created"
+        },
+        {
+          "name": "DocTime",
+          "type": "unknown",
+          "description": "creation time as HHMM number"
+        },
+        {
+          "name": "DocNum",
+          "type": "unknown",
+          "description": "document number shown to users"
+        },
+        {
+          "name": "DocDate",
+          "type": "unknown",
+          "description": "posting date"
+        },
+        {
+          "name": "CANCELED",
+          "type": "unknown",
+          "description": "'Y' = cancelled, 'N' = valid. Always filter CANCELED = 'N'"
+        },
+        {
+          "name": "DocStatus",
+          "type": "unknown",
+          "description": "'O' = open, 'C' = closed"
+        },
+        {
+          "name": "UserSign",
+          "type": "unknown",
+          "description": "user id who created the document (OUSR.USERID)"
+        },
+        {
+          "name": "ReqDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "CreateTS",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DocDueDate",
+          "type": "unknown",
+          "description": "due / delivery date"
+        },
+        {
+          "name": "StrDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Requester",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Comments",
+          "type": "unknown",
+          "description": "free text remarks"
+        },
+        {
+          "name": "EndDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "CardCode",
+          "type": "unknown",
+          "description": "business partner code"
+        },
+        {
+          "name": "CardName",
+          "type": "unknown",
+          "description": "business partner name"
+        }
+      ]
+    },
+    {
+      "name": "ORPC",
+      "description": "A/P Credit Memo header (purchase return). Subtract from purchases",
+      "columns": [
+        {
+          "name": "DocDate",
+          "type": "unknown",
+          "description": "posting date"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "CANCELED",
+          "type": "unknown",
+          "description": "'Y' = cancelled, 'N' = valid. Always filter CANCELED = 'N'"
+        },
+        {
+          "name": "CardCode",
+          "type": "unknown",
+          "description": "business partner code"
+        },
+        {
+          "name": "DiscSum",
+          "type": "unknown",
+          "description": "header discount amount"
+        },
+        {
+          "name": "DiscPrcnt",
+          "type": "unknown",
+          "description": "header discount percent"
+        },
+        {
+          "name": "DocNum",
+          "type": "unknown",
+          "description": "document number shown to users"
+        },
+        {
+          "name": "CardName",
+          "type": "unknown",
+          "description": "business partner name"
+        },
+        {
+          "name": "WTSum",
+          "type": "unknown",
+          "description": "withholding tax amount"
+        },
+        {
+          "name": "DocStatus",
+          "type": "unknown",
+          "description": "'O' = open, 'C' = closed"
+        },
+        {
+          "name": "NumAtCard",
+          "type": "unknown",
+          "description": "customer / vendor reference number"
+        },
+        {
+          "name": "DocType",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DocTotal",
+          "type": "unknown",
+          "description": "document total in INR incl. tax"
+        },
+        {
+          "name": "VatSum",
+          "type": "unknown",
+          "description": "tax amount"
+        },
+        {
+          "name": "PayToCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "TaxDate",
+          "type": "unknown",
+          "description": "document date"
+        },
+        {
+          "name": "BPLId",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "BPLName",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Series",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Indicator",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "TotalExpns",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "RoundDif",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "GSTTranTyp",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Address",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Address2",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ShipToCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Ref1",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Ref2",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Comments",
+          "type": "unknown",
+          "description": "free text remarks"
+        },
+        {
+          "name": "DocDueDate",
+          "type": "unknown",
+          "description": "due / delivery date"
+        },
+        {
+          "name": "PaidToDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "LicTradNum",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "PDN1",
+      "description": "Goods Receipt PO lines",
+      "columns": [
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "BaseEntry",
+          "type": "unknown",
+          "description": "DocEntry of the source document"
+        },
+        {
+          "name": "BaseLine",
+          "type": "unknown",
+          "description": "LineNum of the source document line"
+        },
+        {
+          "name": "LineNum",
+          "type": "unknown",
+          "description": "line number inside a document"
+        },
+        {
+          "name": "BaseType",
+          "type": "unknown",
+          "description": "object type of the source document (13 A/R invoice, 15 delivery, 17 sales order, 18 A/P invoice, 20 GRPO, 22 purchase order, 202 production order, 1470000113 purchase request)"
+        },
+        {
+          "name": "LineTotal",
+          "type": "unknown",
+          "description": "line amount in local currency (INR) before header discount and tax"
+        },
+        {
+          "name": "Price",
+          "type": "unknown",
+          "description": "unit price"
+        },
+        {
+          "name": "OpenQty",
+          "type": "unknown",
+          "description": "quantity still open (not yet delivered / received / invoiced)"
+        },
+        {
+          "name": "Quantity",
+          "type": "unknown",
+          "description": "quantity"
+        },
+        {
+          "name": "ItemCode",
+          "type": "unknown",
+          "description": "item code"
+        },
+        {
+          "name": "VatSum",
+          "type": "unknown",
+          "description": "tax amount"
+        },
+        {
+          "name": "LineStatus",
+          "type": "unknown",
+          "description": "line status 'O' open, 'C' closed"
+        },
+        {
+          "name": "Dscription",
+          "type": "unknown",
+          "description": "item description on the document line"
+        },
+        {
+          "name": "UomCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "TaxCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VatPrcnt",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "G_TS",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "PO_DocEntry",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "PO_Line",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "G_Line",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "G_DocEntry",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "G_DocDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "G_Cum_Qty",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "G_No",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "G_Owner",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "G_Qty",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OPDN",
+      "description": "Goods Receipt PO (GRPO / GRN) header",
+      "columns": [
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "DocTime",
+          "type": "unknown",
+          "description": "creation time as HHMM number"
+        },
+        {
+          "name": "CreateDate",
+          "type": "unknown",
+          "description": "date the record was created"
+        },
+        {
+          "name": "DocDate",
+          "type": "unknown",
+          "description": "posting date"
+        },
+        {
+          "name": "DocNum",
+          "type": "unknown",
+          "description": "document number shown to users"
+        },
+        {
+          "name": "CANCELED",
+          "type": "unknown",
+          "description": "'Y' = cancelled, 'N' = valid. Always filter CANCELED = 'N'"
+        },
+        {
+          "name": "CardCode",
+          "type": "unknown",
+          "description": "business partner code"
+        },
+        {
+          "name": "WTSum",
+          "type": "unknown",
+          "description": "withholding tax amount"
+        },
+        {
+          "name": "DocStatus",
+          "type": "unknown",
+          "description": "'O' = open, 'C' = closed"
+        },
+        {
+          "name": "DocTotal",
+          "type": "unknown",
+          "description": "document total in INR incl. tax"
+        },
+        {
+          "name": "NumAtCard",
+          "type": "unknown",
+          "description": "customer / vendor reference number"
+        },
+        {
+          "name": "CardName",
+          "type": "unknown",
+          "description": "business partner name"
+        },
+        {
+          "name": "DocDueDate",
+          "type": "unknown",
+          "description": "due / delivery date"
+        },
+        {
+          "name": "VatSum",
+          "type": "unknown",
+          "description": "tax amount"
+        },
+        {
+          "name": "UserSign",
+          "type": "unknown",
+          "description": "user id who created the document (OUSR.USERID)"
+        },
+        {
+          "name": "TaxDate",
+          "type": "unknown",
+          "description": "document date"
+        },
+        {
+          "name": "BPLName",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DiscSum",
+          "type": "unknown",
+          "description": "header discount amount"
+        },
+        {
+          "name": "DocType",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DiscPrcnt",
+          "type": "unknown",
+          "description": "header discount percent"
+        },
+        {
+          "name": "BPLId",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "StrDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "PaidToDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "EndDate",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "RPC1",
+      "description": "A/P Credit Memo lines",
+      "columns": [
+        {
+          "name": "LineTotal",
+          "type": "unknown",
+          "description": "line amount in local currency (INR) before header discount and tax"
+        },
+        {
+          "name": "TaxCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VatSum",
+          "type": "unknown",
+          "description": "tax amount"
+        },
+        {
+          "name": "ItemCode",
+          "type": "unknown",
+          "description": "item code"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "LineNum",
+          "type": "unknown",
+          "description": "line number inside a document"
+        },
+        {
+          "name": "Dscription",
+          "type": "unknown",
+          "description": "item description on the document line"
+        },
+        {
+          "name": "Price",
+          "type": "unknown",
+          "description": "unit price"
+        },
+        {
+          "name": "Quantity",
+          "type": "unknown",
+          "description": "quantity"
+        },
+        {
+          "name": "DiscPrcnt",
+          "type": "unknown",
+          "description": "header discount percent"
+        },
+        {
+          "name": "VatPrcnt",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "OpenQty",
+          "type": "unknown",
+          "description": "quantity still open (not yet delivered / received / invoiced)"
+        },
+        {
+          "name": "BaseEntry",
+          "type": "unknown",
+          "description": "DocEntry of the source document"
+        },
+        {
+          "name": "unitMsr",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "WhsCode",
+          "type": "unknown",
+          "description": "warehouse code"
+        },
+        {
+          "name": "BaseLine",
+          "type": "unknown",
+          "description": "LineNum of the source document line"
+        },
+        {
+          "name": "UomCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "LineStatus",
+          "type": "unknown",
+          "description": "line status 'O' open, 'C' closed"
+        },
+        {
+          "name": "BaseType",
+          "type": "unknown",
+          "description": "object type of the source document (13 A/R invoice, 15 delivery, 17 sales order, 18 A/P invoice, 20 GRPO, 22 purchase order, 202 production order, 1470000113 purchase request)"
+        }
+      ]
+    },
+    {
+      "name": "OWOR",
+      "description": "Production Order (work order). Type S/P/D, Status P/R/L/C",
+      "columns": [
+        {
+          "name": "PostDate",
+          "type": "unknown",
+          "description": "production order posting date"
+        },
+        {
+          "name": "Type",
+          "type": "unknown",
+          "description": "production order type S standard, D disassembly, P special"
+        },
+        {
+          "name": "CmpltQty",
+          "type": "unknown",
+          "description": "production completed quantity"
+        },
+        {
+          "name": "PlannedQty",
+          "type": "unknown",
+          "description": "production planned quantity"
+        },
+        {
+          "name": "ItemCode",
+          "type": "unknown",
+          "description": "item code"
+        },
+        {
+          "name": "RjctQty",
+          "type": "unknown",
+          "description": "production rejected quantity"
+        },
+        {
+          "name": "DocNum",
+          "type": "unknown",
+          "description": "document number shown to users"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "Status",
+          "type": "unknown",
+          "description": "status code"
+        },
+        {
+          "name": "Warehouse",
+          "type": "unknown",
+          "description": "warehouse code"
+        },
+        {
+          "name": "DueDate",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OITW",
+      "description": "Item stock per warehouse (OnHand, IsCommited, OnOrder, MinStock, MaxStock)",
+      "columns": [
+        {
+          "name": "OnHand",
+          "type": "unknown",
+          "description": "stock quantity on hand"
+        },
+        {
+          "name": "ItemCode",
+          "type": "unknown",
+          "description": "item code"
+        },
+        {
+          "name": "WhsCode",
+          "type": "unknown",
+          "description": "warehouse code"
+        },
+        {
+          "name": "MinStock",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "MaxStock",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "MinOrder",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "IsCommited",
+          "type": "unknown",
+          "description": "quantity committed to sales orders"
+        },
+        {
+          "name": "OnOrder",
+          "type": "unknown",
+          "description": "quantity on purchase orders"
+        }
+      ]
+    },
+    {
+      "name": "OINM",
+      "description": "Inventory movements / stock ledger (InQty, OutQty, TransValue per posting)",
+      "columns": [
+        {
+          "name": "DocDate",
+          "type": "unknown",
+          "description": "posting date"
+        },
+        {
+          "name": "OutQty",
+          "type": "unknown",
+          "description": "quantity issued out of stock"
+        },
+        {
+          "name": "ItemCode",
+          "type": "unknown",
+          "description": "item code"
+        },
+        {
+          "name": "InQty",
+          "type": "unknown",
+          "description": "quantity received into stock"
+        },
+        {
+          "name": "TransValue",
+          "type": "unknown",
+          "description": "stock value of the movement"
+        },
+        {
+          "name": "Warehouse",
+          "type": "unknown",
+          "description": "warehouse code"
+        },
+        {
+          "name": "TransType",
+          "type": "unknown",
+          "description": "object type of the posting (13 invoice, 20 GRPO, 59 goods receipt, 60 goods issue, 202 production)"
+        },
+        {
+          "name": "DocDueDate",
+          "type": "unknown",
+          "description": "due / delivery date"
+        },
+        {
+          "name": "BASE_REF",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Dscription",
+          "type": "unknown",
+          "description": "item description on the document line"
+        },
+        {
+          "name": "Price",
+          "type": "unknown",
+          "description": "unit price"
+        },
+        {
+          "name": "CalcPrice",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "TransSeq",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "AppObjAbs",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "PRQ21",
+      "description": "Purchase Request reference to sales order (RefDocNum)",
+      "columns": [
+        {
+          "name": "RefDocNum",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "Remark",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "RefObjType",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "RefDocEntr",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "IGE1",
+      "description": "Goods Issue lines",
+      "columns": [
+        {
+          "name": "Quantity",
+          "type": "unknown",
+          "description": "quantity"
+        },
+        {
+          "name": "ItemCode",
+          "type": "unknown",
+          "description": "item code"
+        },
+        {
+          "name": "BaseType",
+          "type": "unknown",
+          "description": "object type of the source document (13 A/R invoice, 15 delivery, 17 sales order, 18 A/P invoice, 20 GRPO, 22 purchase order, 202 production order, 1470000113 purchase request)"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "BaseRef",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "StockPrice",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "WhsCode",
+          "type": "unknown",
+          "description": "warehouse code"
+        },
+        {
+          "name": "OcrCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "BaseEntry",
+          "type": "unknown",
+          "description": "DocEntry of the source document"
+        },
+        {
+          "name": "TranType",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_REJUNFIL",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_REJSCAL",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_REJSCR",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_REJUNBRO",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_REWRK",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Dscription",
+          "type": "unknown",
+          "description": "item description on the document line"
+        },
+        {
+          "name": "Price",
+          "type": "unknown",
+          "description": "unit price"
+        },
+        {
+          "name": "unitMsr",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OIGE",
+      "description": "Goods Issue header (material issued to production / consumption)",
+      "columns": [
+        {
+          "name": "DocDate",
+          "type": "unknown",
+          "description": "posting date"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "DocNum",
+          "type": "unknown",
+          "description": "document number shown to users"
+        },
+        {
+          "name": "UserSign",
+          "type": "unknown",
+          "description": "user id who created the document (OUSR.USERID)"
+        },
+        {
+          "name": "BPLName",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Series",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "CANCELED",
+          "type": "unknown",
+          "description": "'Y' = cancelled, 'N' = valid. Always filter CANCELED = 'N'"
+        }
+      ]
+    },
+    {
+      "name": "CRD1",
+      "description": "Business partner addresses",
+      "columns": [
+        {
+          "name": "CardCode",
+          "type": "unknown",
+          "description": "business partner code"
+        },
+        {
+          "name": "Address",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "AdresType",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Country",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "GSTRegnNo",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "JDT1",
+      "description": "Journal entry lines (Account, Debit, Credit)",
+      "columns": [
+        {
+          "name": "RefDate",
+          "type": "unknown",
+          "description": "journal posting date"
+        },
+        {
+          "name": "Credit",
+          "type": "unknown",
+          "description": "credit amount"
+        },
+        {
+          "name": "Debit",
+          "type": "unknown",
+          "description": "debit amount"
+        },
+        {
+          "name": "Account",
+          "type": "unknown",
+          "description": "G/L account code"
+        },
+        {
+          "name": "TransId",
+          "type": "unknown",
+          "description": "journal entry number"
+        },
+        {
+          "name": "FCDebit",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "FCCredit",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ShortName",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Line_ID",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Ref1",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Ref2",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "BaseRef",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "LineMemo",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Ref3Line",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "AcctCode",
+          "type": "unknown",
+          "description": "G/L account code"
+        }
+      ]
+    },
+    {
+      "name": "OACT",
+      "description": "Chart of accounts (AcctCode, AcctName, GroupMask 1 asset, 2 liability, 3 equity, 4 revenue, 5 expense)",
+      "columns": [
+        {
+          "name": "AcctCode",
+          "type": "unknown",
+          "description": "G/L account code"
+        },
+        {
+          "name": "GroupMask",
+          "type": "unknown",
+          "description": "account group"
+        },
+        {
+          "name": "AcctName",
+          "type": "unknown",
+          "description": "G/L account name"
+        },
+        {
+          "name": "FatherNum",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Levels",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Postable",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "@UTL_GE_OGIN",
+      "description": "Gate Inward header (vehicle / material arrival at the gate). Custom table",
+      "columns": [
+        {
+          "name": "CreateTime",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_UTL_DocDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "CreateDate",
+          "type": "unknown",
+          "description": "date the record was created"
+        },
+        {
+          "name": "DocNum",
+          "type": "unknown",
+          "description": "document number shown to users"
+        },
+        {
+          "name": "Canceled",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "UserSign",
+          "type": "unknown",
+          "description": "user id who created the document (OUSR.USERID)"
+        },
+        {
+          "name": "Creator",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Status",
+          "type": "unknown",
+          "description": "status code"
+        }
+      ]
+    },
+    {
+      "name": "@UTL_GE_GIN1",
+      "description": "Gate Inward lines; links to purchase order line via U_UTL_BASENTR (PO DocEntry) and U_UTL_BASELINE (PO LineNum)",
+      "columns": [
+        {
+          "name": "U_UTL_BASENTR",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_UTL_BASELINE",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "U_UTL_QTY",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "LineId",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OITT",
+      "description": "Bill of material (BOM) header per parent item",
+      "columns": [
+        {
+          "name": "Code",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Qauntity",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_PRDTYP",
+          "type": "unknown",
+          "description": "product type / stage"
+        },
+        {
+          "name": "U_Hammer",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_Die",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_DieCap",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_Prodhr",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_NXTSETION",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_PRVSETION",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_BRND",
+          "type": "unknown",
+          "description": "brand"
+        }
+      ]
+    },
+    {
+      "name": "IGN1",
+      "description": "Goods Receipt lines",
+      "columns": [
+        {
+          "name": "Quantity",
+          "type": "unknown",
+          "description": "quantity"
+        },
+        {
+          "name": "ItemCode",
+          "type": "unknown",
+          "description": "item code"
+        },
+        {
+          "name": "TranType",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "BaseType",
+          "type": "unknown",
+          "description": "object type of the source document (13 A/R invoice, 15 delivery, 17 sales order, 18 A/P invoice, 20 GRPO, 22 purchase order, 202 production order, 1470000113 purchase request)"
+        },
+        {
+          "name": "BaseRef",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "WhsCode",
+          "type": "unknown",
+          "description": "warehouse code"
+        },
+        {
+          "name": "U_REWRK",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "BaseEntry",
+          "type": "unknown",
+          "description": "DocEntry of the source document"
+        },
+        {
+          "name": "U_REJUNFIL",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_REJSCAL",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_REJSCR",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_REJUNBRO",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "StockPrice",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Price",
+          "type": "unknown",
+          "description": "unit price"
+        },
+        {
+          "name": "OcrCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_CHRREP",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_NICREP",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_BLTREP",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "U_FINFLT",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OIGN",
+      "description": "Goods Receipt header (production receipts, stock in)",
+      "columns": [
+        {
+          "name": "DocDate",
+          "type": "unknown",
+          "description": "posting date"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "DocNum",
+          "type": "unknown",
+          "description": "document number shown to users"
+        },
+        {
+          "name": "UserSign",
+          "type": "unknown",
+          "description": "user id who created the document (OUSR.USERID)"
+        },
+        {
+          "name": "Series",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "BPLName",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Comments",
+          "type": "unknown",
+          "description": "free text remarks"
+        }
+      ]
+    },
+    {
+      "name": "NNM1",
+      "description": "Document series",
+      "columns": [
+        {
+          "name": "Series",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Indicator",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "SeriesName",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OJDT",
+      "description": "Journal entry header (RefDate, TransId)",
+      "columns": [
+        {
+          "name": "RefDate",
+          "type": "unknown",
+          "description": "journal posting date"
+        },
+        {
+          "name": "TransId",
+          "type": "unknown",
+          "description": "journal entry number"
+        },
+        {
+          "name": "TransType",
+          "type": "unknown",
+          "description": "object type of the posting (13 invoice, 20 GRPO, 59 goods receipt, 60 goods issue, 202 production)"
+        },
+        {
+          "name": "Memo",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "UpdateDate",
+          "type": "unknown",
+          "description": "last update date"
+        },
+        {
+          "name": "CreateDate",
+          "type": "unknown",
+          "description": "date the record was created"
+        },
+        {
+          "name": "Ref1",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Ref2",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "CreatedBy",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "BOM_ALLOCATION_RESULTS_V5",
+      "description": "Custom table filled by stored procedure: BOM explosion per sales order with RequiredQty, InStock, AllocatedQty, Shortage per child item and Level",
+      "columns": [
+        {
+          "name": "ItemGroup",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ChildItem",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ParentItem",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "OrderNo",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ChildDesc",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "RequiredQty",
+          "type": "unknown",
+          "description": "required quantity"
+        },
+        {
+          "name": "VMS",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OBPL",
+      "description": "Branches",
+      "columns": [
+        {
+          "name": "BPLId",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "BPLName",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OCRY",
+      "description": "Countries",
+      "columns": [
+        {
+          "name": "Name",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Code",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OVPM",
+      "description": "Outgoing payment header (vendor payments)",
+      "columns": [
+        {
+          "name": "DocDate",
+          "type": "unknown",
+          "description": "posting date"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "DocNum",
+          "type": "unknown",
+          "description": "document number shown to users"
+        },
+        {
+          "name": "Canceled",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DocTotal",
+          "type": "unknown",
+          "description": "document total in INR incl. tax"
+        },
+        {
+          "name": "CardCode",
+          "type": "unknown",
+          "description": "business partner code"
+        },
+        {
+          "name": "CardName",
+          "type": "unknown",
+          "description": "business partner name"
+        },
+        {
+          "name": "CashSum",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "CheckSum",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "TrsfrSum",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Comments",
+          "type": "unknown",
+          "description": "free text remarks"
+        }
+      ]
+    },
+    {
+      "name": "VPM2",
+      "description": "Outgoing payment invoice links",
+      "columns": [
+        {
+          "name": "DocNum",
+          "type": "unknown",
+          "description": "document number shown to users"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "InvType",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "SumApplied",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OOCR",
+      "description": "Cost centers (distribution rules)",
+      "columns": [
+        {
+          "name": "OcrName",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "OcrCode",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "DLN1",
+      "description": "Delivery lines",
+      "columns": [
+        {
+          "name": "LineTotal",
+          "type": "unknown",
+          "description": "line amount in local currency (INR) before header discount and tax"
+        },
+        {
+          "name": "ItemCode",
+          "type": "unknown",
+          "description": "item code"
+        },
+        {
+          "name": "Price",
+          "type": "unknown",
+          "description": "unit price"
+        },
+        {
+          "name": "OpenQty",
+          "type": "unknown",
+          "description": "quantity still open (not yet delivered / received / invoiced)"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "LineNum",
+          "type": "unknown",
+          "description": "line number inside a document"
+        },
+        {
+          "name": "BaseEntry",
+          "type": "unknown",
+          "description": "DocEntry of the source document"
+        },
+        {
+          "name": "Dscription",
+          "type": "unknown",
+          "description": "item description on the document line"
+        },
+        {
+          "name": "Quantity",
+          "type": "unknown",
+          "description": "quantity"
+        },
+        {
+          "name": "UomCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "TaxCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VatPrcnt",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "LineStatus",
+          "type": "unknown",
+          "description": "line status 'O' open, 'C' closed"
+        },
+        {
+          "name": "BaseType",
+          "type": "unknown",
+          "description": "object type of the source document (13 A/R invoice, 15 delivery, 17 sales order, 18 A/P invoice, 20 GRPO, 22 purchase order, 202 production order, 1470000113 purchase request)"
+        },
+        {
+          "name": "BaseLine",
+          "type": "unknown",
+          "description": "LineNum of the source document line"
+        }
+      ]
+    },
+    {
+      "name": "PCH3",
+      "description": "A/P Invoice freight lines",
+      "columns": [
+        {
+          "name": "TaxCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VatSum",
+          "type": "unknown",
+          "description": "tax amount"
+        },
+        {
+          "name": "LineTotal",
+          "type": "unknown",
+          "description": "line amount in local currency (INR) before header discount and tax"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "LineNum",
+          "type": "unknown",
+          "description": "line number inside a document"
+        }
+      ]
+    },
+    {
+      "name": "RPC3",
+      "description": "A/P Credit Memo freight lines",
+      "columns": [
+        {
+          "name": "TaxCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VatSum",
+          "type": "unknown",
+          "description": "tax amount"
+        },
+        {
+          "name": "LineTotal",
+          "type": "unknown",
+          "description": "line amount in local currency (INR) before header discount and tax"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "LineNum",
+          "type": "unknown",
+          "description": "line number inside a document"
+        }
+      ]
+    },
+    {
+      "name": "OCTG",
+      "description": "Payment terms",
+      "columns": [
+        {
+          "name": "GroupNum",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "PymntGroup",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OSCN",
+      "description": "Customer catalog numbers (customer item code per customer)",
+      "columns": [
+        {
+          "name": "CardCode",
+          "type": "unknown",
+          "description": "business partner code"
+        },
+        {
+          "name": "ItemCode",
+          "type": "unknown",
+          "description": "item code"
+        },
+        {
+          "name": "Substitute",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "RIN3",
+      "description": "A/R Credit Memo freight lines",
+      "columns": [
+        {
+          "name": "TaxCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VatSum",
+          "type": "unknown",
+          "description": "tax amount"
+        },
+        {
+          "name": "LineTotal",
+          "type": "unknown",
+          "description": "line amount in local currency (INR) before header discount and tax"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "LineNum",
+          "type": "unknown",
+          "description": "line number inside a document"
+        }
+      ]
+    },
+    {
+      "name": "INV3",
+      "description": "A/R Invoice freight / additional expense lines",
+      "columns": [
+        {
+          "name": "TaxCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VatSum",
+          "type": "unknown",
+          "description": "tax amount"
+        },
+        {
+          "name": "LineTotal",
+          "type": "unknown",
+          "description": "line amount in local currency (INR) before header discount and tax"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "LineNum",
+          "type": "unknown",
+          "description": "line number inside a document"
+        }
+      ]
+    },
+    {
+      "name": "ITT1",
+      "description": "BOM components (Father = parent item, Code = component)",
+      "columns": [
+        {
+          "name": "Code",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Father",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Quantity",
+          "type": "unknown",
+          "description": "quantity"
+        }
+      ]
+    },
+    {
+      "name": "ODLN",
+      "description": "Delivery header (goods shipped to customer)",
+      "columns": [
+        {
+          "name": "DocTotal",
+          "type": "unknown",
+          "description": "document total in INR incl. tax"
+        },
+        {
+          "name": "DocDate",
+          "type": "unknown",
+          "description": "posting date"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "CardCode",
+          "type": "unknown",
+          "description": "business partner code"
+        },
+        {
+          "name": "DiscSum",
+          "type": "unknown",
+          "description": "header discount amount"
+        },
+        {
+          "name": "DocStatus",
+          "type": "unknown",
+          "description": "'O' = open, 'C' = closed"
+        },
+        {
+          "name": "VatSum",
+          "type": "unknown",
+          "description": "tax amount"
+        },
+        {
+          "name": "DocNum",
+          "type": "unknown",
+          "description": "document number shown to users"
+        },
+        {
+          "name": "NumAtCard",
+          "type": "unknown",
+          "description": "customer / vendor reference number"
+        },
+        {
+          "name": "CardName",
+          "type": "unknown",
+          "description": "business partner name"
+        },
+        {
+          "name": "CANCELED",
+          "type": "unknown",
+          "description": "'Y' = cancelled, 'N' = valid. Always filter CANCELED = 'N'"
+        },
+        {
+          "name": "DocType",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "BPLName",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "WTSum",
+          "type": "unknown",
+          "description": "withholding tax amount"
+        },
+        {
+          "name": "DocDueDate",
+          "type": "unknown",
+          "description": "due / delivery date"
+        },
+        {
+          "name": "TaxDate",
+          "type": "unknown",
+          "description": "document date"
+        },
+        {
+          "name": "BPLId",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "CRD7",
+      "description": "Business partner tax IDs",
+      "columns": [
+        {
+          "name": "CardCode",
+          "type": "unknown",
+          "description": "business partner code"
+        },
+        {
+          "name": "Address",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "AddrType",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OCST",
+      "description": "States",
+      "columns": [
+        {
+          "name": "Name",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Code",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Country",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OSPP",
+      "description": "Special prices per customer",
+      "columns": [
+        {
+          "name": "ItemCode",
+          "type": "unknown",
+          "description": "item code"
+        },
+        {
+          "name": "Currency",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Price",
+          "type": "unknown",
+          "description": "unit price"
+        },
+        {
+          "name": "CardCode",
+          "type": "unknown",
+          "description": "business partner code"
+        },
+        {
+          "name": "CreateDate",
+          "type": "unknown",
+          "description": "date the record was created"
+        },
+        {
+          "name": "UpdateDate",
+          "type": "unknown",
+          "description": "last update date"
+        },
+        {
+          "name": "ListNum",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "HLD1",
+      "description": "Holiday list (StrDate, EndDate)",
+      "columns": [
+        {
+          "name": "StrDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DocTime",
+          "type": "unknown",
+          "description": "creation time as HHMM number"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "CreateDate",
+          "type": "unknown",
+          "description": "date the record was created"
+        },
+        {
+          "name": "EndDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "CANCELED",
+          "type": "unknown",
+          "description": "'Y' = cancelled, 'N' = valid. Always filter CANCELED = 'N'"
+        },
+        {
+          "name": "DocNum",
+          "type": "unknown",
+          "description": "document number shown to users"
+        },
+        {
+          "name": "DocDate",
+          "type": "unknown",
+          "description": "posting date"
+        },
+        {
+          "name": "UserSign",
+          "type": "unknown",
+          "description": "user id who created the document (OUSR.USERID)"
+        }
+      ]
+    },
+    {
+      "name": "OIVL",
+      "description": "Inventory valuation layers",
+      "columns": [
+        {
+          "name": "DocDate",
+          "type": "unknown",
+          "description": "posting date"
+        },
+        {
+          "name": "ItemCode",
+          "type": "unknown",
+          "description": "item code"
+        },
+        {
+          "name": "InQty",
+          "type": "unknown",
+          "description": "quantity received into stock"
+        },
+        {
+          "name": "OutQty",
+          "type": "unknown",
+          "description": "quantity issued out of stock"
+        },
+        {
+          "name": "LocCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "TransSeq",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Price",
+          "type": "unknown",
+          "description": "unit price"
+        },
+        {
+          "name": "TransType",
+          "type": "unknown",
+          "description": "object type of the posting (13 invoice, 20 GRPO, 59 goods receipt, 60 goods issue, 202 production)"
+        }
+      ]
+    },
+    {
+      "name": "RDR12",
+      "description": "Sales Order address / state details",
+      "columns": [
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "StateB",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "CountryB",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "CityS",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "INV12",
+      "description": "A/R Invoice export details (port, shipping bill)",
+      "columns": [
+        {
+          "name": "ImpExpDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "PortCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ImpExpNo",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        }
+      ]
+    },
+    {
+      "name": "ORPD",
+      "description": "Goods Return header",
+      "columns": [
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "CANCELED",
+          "type": "unknown",
+          "description": "'Y' = cancelled, 'N' = valid. Always filter CANCELED = 'N'"
+        }
+      ]
+    },
+    {
+      "name": "RPD1",
+      "description": "Goods Return lines",
+      "columns": [
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "BaseType",
+          "type": "unknown",
+          "description": "object type of the source document (13 A/R invoice, 15 delivery, 17 sales order, 18 A/P invoice, 20 GRPO, 22 purchase order, 202 production order, 1470000113 purchase request)"
+        },
+        {
+          "name": "BaseEntry",
+          "type": "unknown",
+          "description": "DocEntry of the source document"
+        },
+        {
+          "name": "BaseLine",
+          "type": "unknown",
+          "description": "LineNum of the source document line"
+        }
+      ]
+    },
+    {
+      "name": "OEML",
+      "description": "Sent e-mail log",
+      "columns": [
+        {
+          "name": "SendDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "SendTime",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "U_NAME",
+          "type": "unknown",
+          "description": "user name"
+        },
+        {
+          "name": "AbsEntry",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "EMailAddr",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ObjType",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "BOM_ALLOCATION_RESULTS",
+      "description": "",
+      "columns": [
+        {
+          "name": "Level",
+          "type": "unknown",
+          "description": "BOM level (0 = parent)"
+        },
+        {
+          "name": "CardCode",
+          "type": "unknown",
+          "description": "business partner code"
+        },
+        {
+          "name": "ChildItem",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "OrderNo",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "AllocatedQty",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "CardName",
+          "type": "unknown",
+          "description": "business partner name"
+        },
+        {
+          "name": "ChildDesc",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DueDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "InStock",
+          "type": "unknown",
+          "description": "stock available"
+        },
+        {
+          "name": "ItemGroup",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ItemSeqNo",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "OrderDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ParentDesc",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ParentItem",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Parent_Procurement",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Path",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ProductType_Child",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ProductType_Parent",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Remaining",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "RequiredQty",
+          "type": "unknown",
+          "description": "required quantity"
+        },
+        {
+          "name": "RunTS",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "SO_RemainingQty",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "SeqNo",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Shortage",
+          "type": "unknown",
+          "description": "shortage quantity"
+        },
+        {
+          "name": "SubGroup",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VMS",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "ORTT",
+      "description": "Currency exchange rates",
+      "columns": [
+        {
+          "name": "Rate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "RateDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Currency",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "OCHP",
+      "description": "HSN / chapter codes",
+      "columns": [
+        {
+          "name": "Chapter",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "AbsEntry",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "PCH12",
+      "description": "A/P Invoice address details",
+      "columns": [
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "StateB",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "CountryB",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "CityB",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "BOM_TREE_REPORTS",
+      "description": "Custom table: BOM tree with last purchase price per component",
+      "columns": [
+        {
+          "name": "LastPrice",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ParentItem",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "ChildItem",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Level",
+          "type": "unknown",
+          "description": "BOM level (0 = parent)"
+        },
+        {
+          "name": "BOMQty",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "RequiredQty",
+          "type": "unknown",
+          "description": "required quantity"
+        },
+        {
+          "name": "LastPurchaseQty",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "LastPurchaseDate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VendorCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "VendorName",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Path",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "ORCT",
+      "description": "Incoming payment header (customer receipts)",
+      "columns": [
+        {
+          "name": "DocDate",
+          "type": "unknown",
+          "description": "posting date"
+        },
+        {
+          "name": "DocNum",
+          "type": "unknown",
+          "description": "document number shown to users"
+        },
+        {
+          "name": "DocTotal",
+          "type": "unknown",
+          "description": "document total in INR incl. tax"
+        },
+        {
+          "name": "CardCode",
+          "type": "unknown",
+          "description": "business partner code"
+        },
+        {
+          "name": "CardName",
+          "type": "unknown",
+          "description": "business partner name"
+        },
+        {
+          "name": "CashSum",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "CheckSum",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "TrsfrSum",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Comments",
+          "type": "unknown",
+          "description": "free text remarks"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        },
+        {
+          "name": "Canceled",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "RCT2",
+      "description": "Incoming payment invoice links",
+      "columns": [
+        {
+          "name": "SumApplied",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "DocNum",
+          "type": "unknown",
+          "description": "document number shown to users"
+        },
+        {
+          "name": "DocEntry",
+          "type": "unknown",
+          "description": "internal document key; join header.DocEntry = lines.DocEntry"
+        }
+      ]
+    },
+    {
+      "name": "OWHT",
+      "description": "Withholding tax codes (TDS / TCS)",
+      "columns": [
+        {
+          "name": "WTName",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "WTCode",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "RIN5",
+      "description": "A/R Credit Memo withholding tax",
+      "columns": [
+        {
+          "name": "WTCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Rate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "TaxbleAmnt",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "WTAmnt",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "AbsEntry",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "INV5",
+      "description": "",
+      "columns": [
+        {
+          "name": "WTCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Rate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "TaxbleAmnt",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "WTAmnt",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "AbsEntry",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "RPC5",
+      "description": "A/P Credit Memo withholding tax",
+      "columns": [
+        {
+          "name": "WTCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Rate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "TaxbleAmnt",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "WTAmnt",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "AbsEntry",
+          "type": "unknown",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "PCH5",
+      "description": "A/P Invoice withholding tax",
+      "columns": [
+        {
+          "name": "WTCode",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "Rate",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "TaxbleAmnt",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "WTAmnt",
+          "type": "unknown",
+          "description": ""
+        },
+        {
+          "name": "AbsEntry",
+          "type": "unknown",
+          "description": ""
+        }
       ]
     }
   ]

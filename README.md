@@ -58,6 +58,56 @@ Any OpenAI-compatible server works (llama.cpp, vLLM, LM Studio): change `LOCAL_B
 | `POST /chat` | `messages:[{role,content}]` | `reply`, `execution_time_ms` |
 | `GET /providers`, `GET /health` | | |
 
+### Required and optional fields
+
+Do not invent values for optional fields. Send only the fields needed by the request.
+Omitting a field lets the Python API use its configured default.
+
+| Endpoint | Always required | Optional |
+|---|---|---|
+| `POST /sql` | `question` | `previous_sql`, `provider`, `model`, `schema_override` |
+| `POST /sql/fix` | `sql`, `error` | `question`, `provider`, `model`, `schema_override` |
+| `POST /visual` | `question`, `columns` | `format` (defaults to `spec`), `provider`, `model` |
+| `POST /chat` | `messages` | `include_schema` (defaults to `true`), `provider`, `model` |
+
+For example, the Node API may send only the question:
+
+```javascript
+const result = await aiPost("/sql", {
+    question: "top 5 customers by total order amount",
+});
+```
+
+To add follow-up context or select a provider, add those fields only when they have values:
+
+```javascript
+const result = await aiPost("/sql", {
+    question,
+    ...(previousSql ? { previous_sql: previousSql } : {}),
+    ...(provider ? { provider } : {}),
+    ...(model ? { model } : {}),
+});
+```
+
+The supplied [aiClient.js](node-integration/aiClient.js) also removes `null` and `undefined`
+values automatically, so callers do not need to send placeholders. `""` is not treated as
+an omitted optional field; omit it or use `null`/`undefined`.
+
+The response includes `execution_time_ms` in milliseconds for the Python endpoint call:
+
+```json
+{
+  "reply": "Hello",
+  "provider": "groq",
+  "model": "llama",
+  "execution_time_ms": 123.45
+}
+```
+
+The `/ai/report` Node route additionally returns `executionTimeMs`, measured from the start
+of the complete Node flow. This includes SQL generation, database execution, repair retry,
+and optional visual generation.
+
 ```bash
 curl -X POST http://127.0.0.1:8001/sql -H "X-API-Key: change-me" -H "Content-Type: application/json" \
   -d '{"question":"top 5 customers by total order amount this year","provider":"openai"}'

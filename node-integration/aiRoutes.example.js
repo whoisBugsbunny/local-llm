@@ -4,6 +4,12 @@
 // import { aiPost } from "../services/aiClient.js";
 import { performance } from "node:perf_hooks";
 
+function optionalObject(values) {
+    return Object.fromEntries(
+        Object.entries(values).filter(([, value]) => value !== undefined && value !== null)
+    );
+}
+
 router.post("/ai/report", async (req, res) => {
     const userId = getUserId(req, res);
     if (!userId) return;
@@ -16,7 +22,12 @@ router.post("/ai/report", async (req, res) => {
     const startedAt = performance.now();
     try {
         // 1) ask the AI for SQL (only schema names go out, never data)
-        let gen = await aiPost("/sql", { question, previous_sql: previousSql, provider, model });
+        let gen = await aiPost("/sql", optionalObject({
+            question,
+            previous_sql: previousSql,
+            provider,
+            model,
+        }));
         if (!gen.sql) return res.json({ needsClarification: true, question: gen.clarifying_question, explanation: gen.explanation, executionTimeMs: Number((performance.now() - startedAt).toFixed(2)) });
 
         // 2) run it through the SAME safe runner you already use

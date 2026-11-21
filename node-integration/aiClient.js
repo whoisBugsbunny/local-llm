@@ -8,13 +8,27 @@ export class AiServiceError extends Error {
     }
 }
 
+/**
+ * Calls the Python AI service.
+ *
+ * Optional fields should be omitted rather than guessed or sent as empty strings.
+ * Undefined and null values are removed automatically before sending.
+ *
+ * @param {string} path
+ * @param {Record<string, unknown>} body
+ * @returns {Promise<Record<string, unknown>>}
+ */
 export async function aiPost(path, body) {
+    const payload = Object.fromEntries(
+        Object.entries(body ?? {}).filter(([, value]) => value !== undefined && value !== null)
+    );
+
     let res;
     try {
         res = await fetch(`${AI_URL}${path}`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-API-Key": process.env.AI_SERVICE_KEY },
-            body: JSON.stringify(body),
+            body: JSON.stringify(payload),
             signal: AbortSignal.timeout(120_000),
         });
     } catch (err) {
